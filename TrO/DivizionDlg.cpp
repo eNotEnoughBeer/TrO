@@ -43,6 +43,14 @@ void DivizionDlg::OnBnClickedDone2()
 	m_gridR.PressReturn();
 	m_gridV.PressReturn();
 	m_gridO.PressReturn();
+
+	int res = pLogic->pDivizions.WriteSQL(pLogic->encriptionKey);
+	res += pLogic->pDivizions.DeleteSQL(delIds);
+	if (res > 0) {
+		AfxMessageBox(_T("¬иникли проблеми ≥з каталогом в≥йськового п≥дрозд≥лу"));
+	}
+
+	pLogic->pDivizions.ReadSQL(pLogic->encriptionKey);
 	CDialog::OnOK();
 }
 
@@ -53,13 +61,13 @@ void DivizionDlg::parseDivision(int rotaId, int vzvodId)
 	otdel.clear();
 	// выбираем все роты
 	for (int i = 0; i < (int)pLogic->pDivizions.divisions.size(); i++) {
-		if (pLogic->pDivizions.divisions[i].rotaId == -1 && pLogic->pDivizions.divisions[i].vzvodId == -1) {
+		if (pLogic->pDivizions.divisions[i].rotaId == 0 && pLogic->pDivizions.divisions[i].vzvodId == 0) {
 			ID_NAME pOne(pLogic->pDivizions.divisions[i].id, pLogic->pDivizions.divisions[i].name);
 			rota.push_back(pOne);
 		}
 	}
-	// выбираем все взводы дл€ конкретной роты. если rotaId==-1, выбираем взводы дл€ первой роты в списке rota 
-	if (rotaId == -1) {
+	// выбираем все взводы дл€ конкретной роты. если rotaId==0, выбираем взводы дл€ первой роты в списке rota 
+	if (rotaId == 0) {
 		if (!rota.empty()) {
 			rotaId = rota[0].id;
 		}
@@ -68,13 +76,13 @@ void DivizionDlg::parseDivision(int rotaId, int vzvodId)
 		}
 	}
 	for (int i = 0; i < (int)pLogic->pDivizions.divisions.size(); i++) {
-		if (pLogic->pDivizions.divisions[i].rotaId == rotaId && pLogic->pDivizions.divisions[i].vzvodId == -1) {
+		if (pLogic->pDivizions.divisions[i].rotaId == rotaId && pLogic->pDivizions.divisions[i].vzvodId == 0) {
 			ID_NAME pOne(pLogic->pDivizions.divisions[i].id, pLogic->pDivizions.divisions[i].name);
 			vzvod.push_back(pOne);
 		}
 	}
-	// выбираем все отделени€ дл€ взвода. если vzvodId==-1, выбираем отделени€ дл€ первого взвода в списке vzvod
-	if (vzvodId == -1) {
+	// выбираем все отделени€ дл€ взвода. если vzvodId==0, выбираем отделени€ дл€ первого взвода в списке vzvod
+	if (vzvodId == 0) {
 		if (!vzvod.empty()) {
 			vzvodId = vzvod[0].id;
 		}
@@ -94,7 +102,7 @@ BOOL DivizionDlg::OnInitDialog()
 {
 	CDialog::OnInitDialog();
 	CenterWindow();
-	parseDivision(-1, -1);
+	parseDivision(0, 0);
 	int iColumn = m_gridR.AddColumn(_T(""), 185);
 	CGridHeaderSection* pSection = m_gridR.GetHeaderSection(0, 0);
 	pSection->SetAlignment(LVCFMT_CENTER);
@@ -121,6 +129,8 @@ BOOL DivizionDlg::OnInitDialog()
 	m_gridO.SetAllowEdit();
 	m_gridO.SetRowCount((int)otdel.size());
 	m_gridO.SetAlwaysSelected();
+	delIds.clear();
+	newRecordIndex = -1;
 	return TRUE;
 }
 
@@ -175,9 +185,9 @@ void DivizionDlg::OnKeyDownGridResectR(LPNMHDR lpNMHDR, LRESULT* pResult)
 	CGridCell cell = m_gridR.GetCellFocused();
 	if (lpNMKey->nVKey == VK_DOWN && cell.m_iRow == m_gridR.GetRowCount() - 1)
 	{
-		Divizion pNewOne(pLogic->ids.divizion_id++, _T(""),-1,-1);// создаем роту
+		Divizion pNewOne(newRecordIndex--, _T(""),0,0);// создаем роту
 		pLogic->pDivizions.divisions.push_back(pNewOne);
-		parseDivision(pNewOne.id, -1);
+		parseDivision(pNewOne.id, 0);
 		m_gridR.SetRowCount((int)rota.size());
 		m_gridO.SetRowCount((int)otdel.size());
 		m_gridV.SetRowCount((int)vzvod.size());
@@ -192,7 +202,7 @@ void DivizionDlg::OnChangeGridR(LPNMHDR lpNMHDR, LRESULT* pResult)
 	VG_DISPINFO* pDispInfo = reinterpret_cast<VG_DISPINFO*>(lpNMHDR);
 	std::vector<ID_NAME>::const_iterator it = rota.begin();
 	std::advance(it, pDispInfo->item.iRow);
-	parseDivision(it->id, -1);
+	parseDivision(it->id, 0);
 
 	m_gridR.SetRowCount((int)rota.size());
 	m_gridO.SetRowCount((int)otdel.size());
@@ -255,7 +265,7 @@ void DivizionDlg::OnKeyDownGridResectV(LPNMHDR lpNMHDR, LRESULT* pResult)
 	{
 		std::vector<ID_NAME>::const_iterator itR = rota.begin();
 		std::advance(itR, m_gridR.GetCellFocused().m_iRow);
-		Divizion pNewOne(pLogic->ids.divizion_id++, _T(""), itR->id, -1);// создаем взвод
+		Divizion pNewOne(newRecordIndex--, _T(""), itR->id, 0);// создаем взвод
 		pLogic->pDivizions.divisions.push_back(pNewOne);
 		parseDivision(itR->id,pNewOne.id);
 
@@ -339,7 +349,7 @@ void DivizionDlg::OnKeyDownGridResectO(LPNMHDR lpNMHDR, LRESULT* pResult)
 		std::advance(itR, m_gridR.GetCellFocused().m_iRow);
 		std::vector<ID_NAME>::const_iterator itV = vzvod.begin();
 		std::advance(itV, m_gridV.GetCellFocused().m_iRow);
-		Divizion pNewOne(pLogic->ids.divizion_id++, _T(""), itR->id, itV->id);// создаем отделение
+		Divizion pNewOne(newRecordIndex--, _T(""), itR->id, itV->id);// создаем отделение
 		pLogic->pDivizions.divisions.push_back(pNewOne);
 		// тут проще. от добавлени€ в третий грид предыдущие два не мен€ютс€
 		ID_NAME pOne(pNewOne.id, _T(""));
@@ -355,7 +365,7 @@ void DivizionDlg::OnBnClickedAdd()
 	m_gridV.PressReturn();
 	m_gridO.PressReturn();
 	CGridCell cell = m_gridR.GetCellFocused();
-	Divizion pNewOne(pLogic->ids.divizion_id++, _T(""), -1, -1);// создаем роту
+	Divizion pNewOne(newRecordIndex--, _T(""), 0, 0);// создаем роту
 	
 	if (m_gridR.GetRowCount() == 0) {
 		pLogic->pDivizions.divisions.push_back(pNewOne);
@@ -373,7 +383,7 @@ void DivizionDlg::OnBnClickedAdd()
 		}
 	}
 
-	parseDivision(pNewOne.id, -1);
+	parseDivision(pNewOne.id, 0);
 	m_gridR.SetRowCount((int)rota.size());
 	m_gridO.SetRowCount((int)otdel.size());
 	m_gridV.SetRowCount((int)vzvod.size());
@@ -407,6 +417,7 @@ void DivizionDlg::OnBnClickedDel()
 		}
 	}
 	if (canDelete) {
+		delIds.push_back(it->id);
 		int id2del = it->id;
 		rota.erase(it);
 		m_gridR.SetRowCount(m_gridR.GetRowCount() - 1);
@@ -424,10 +435,10 @@ void DivizionDlg::OnBnClickedDel()
 		if (!rota.empty()) {
 			std::vector<ID_NAME>::const_iterator itNew;	itNew = rota.begin();
 			std::advance(itNew, m_gridR.GetCellFocused().m_iRow);
-			parseDivision(itNew->id, -1);
+			parseDivision(itNew->id, 0);
 		}
 		else {
-			parseDivision(-1, -1);
+			parseDivision(0, 0);
 		}
 		m_gridR.SetRowCount((int)rota.size());
 		m_gridO.SetRowCount((int)otdel.size());
@@ -455,7 +466,7 @@ void DivizionDlg::OnBnClickedAddv()
 	std::vector<ID_NAME>::const_iterator itR;	itR = rota.begin();
 	std::advance(itR, m_gridR.GetCellFocused().m_iRow);
 	CGridCell cell = m_gridV.GetCellFocused();
-	Divizion pNewOne(pLogic->ids.divizion_id++, _T(""), itR->id, -1);// создаем взвод
+	Divizion pNewOne(newRecordIndex--, _T(""), itR->id, 0);// создаем взвод
 	
 	if (m_gridV.GetRowCount() == 0) {
 		pLogic->pDivizions.divisions.push_back(pNewOne);
@@ -507,6 +518,7 @@ void DivizionDlg::OnBnClickedDelv()
 		}
 	}
 	if (canDelete) {
+		delIds.push_back(it->id);
 		int id2del = it->id;
 		vzvod.erase(it);
 		m_gridV.SetRowCount(m_gridV.GetRowCount() - 1);
@@ -521,7 +533,7 @@ void DivizionDlg::OnBnClickedDelv()
 			}
 		}
 		// вы€снить, куда перешел курсор выделени€ в гриде, если там хоть что-то осталось
-		int rotId = -1, vzvdId = -1;
+		int rotId = 0, vzvdId = 0;
 		if (!vzvod.empty()) {
 			std::vector<ID_NAME>::const_iterator itNew;	itNew = vzvod.begin();
 			std::advance(itNew, m_gridV.GetCellFocused().m_iRow);
@@ -562,7 +574,7 @@ void DivizionDlg::OnBnClickedAddo()
 	std::advance(itV, m_gridV.GetCellFocused().m_iRow);
 
 	CGridCell cell = m_gridO.GetCellFocused();
-	Divizion pNewOne(pLogic->ids.divizion_id++, _T(""), itR->id, itV->id);// создаем отделение
+	Divizion pNewOne(newRecordIndex--, _T(""), itR->id, itV->id);// создаем отделение
 	ID_NAME pOne(pNewOne.id, _T(""));
 	if (m_gridO.GetRowCount() == 0) {
 		pLogic->pDivizions.divisions.push_back(pNewOne);
@@ -605,6 +617,7 @@ void DivizionDlg::OnBnClickedDelo()
 		}
 	}
 	if (canDelete) {
+		delIds.push_back(it->id);
 		int id2del = it->id;
 		otdel.erase(it);
 		m_gridO.SetRowCount(m_gridO.GetRowCount() - 1);

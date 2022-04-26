@@ -62,58 +62,15 @@ static void _getKeys(CString sKey, ulong64* key, CString siv, ulong64* iv)
 	swscanf(siv, _T("%08X%08X"), &iv->h, &iv->l);
 }
 
-// øèôğóåì ñòğîêó "str" ïî êëş÷ó "key"
-static void encodeStr(CString cryptokey, CString& strInOut)
-{
-	if (cryptokey.IsEmpty() || strInOut.IsEmpty())
-		return;
-	_tsetlocale(LC_ALL, _T("ru_UA.UTF-8"));
-	std::string res = get_utf8(strInOut.GetString());
-	//return;
-	unsigned char sha1[20];
-	std::string keymb = get_utf8(cryptokey.GetString());
-	sha1encode_str((char*)keymb.c_str(), sha1);
-	//sha1encode_wcs((LPTSTR)(LPCTSTR)cryptokey, sha1);
-	CString key_str; key_str.Format(_T("%02X%02X%02X%02X%02X%02X%02X%02X"), sha1[0], sha1[1], sha1[2], sha1[3], sha1[4], sha1[5], sha1[6], sha1[7]);
-	CString iv_str; iv_str.Format(_T("%02X%02X%02X%02X%02X%02X%02X%02X"), sha1[19], sha1[18], sha1[17], sha1[16], sha1[15], sha1[14], sha1[13], sha1[12]);
-	ulong64 key, iv;
-	_getKeys(key_str, &key, iv_str, &iv);
-
-	int	i, srclen, dstlen;
-	uchar* src, * dst;
-	WCHAR		szTemp[3];
-
-	//srclen = strInOut.GetLength() + 1;
-	srclen = (int)res.size() + 1;
-	src = new uchar[srclen];
-	strcpy((char*)src, res.c_str());
-	//wcstombs((char*)src, strInOut, srclen);
-	dst = (uchar*)LocalAlloc(LPTR, i = ((srclen >> 3) + 1) << 3);
-	dstlen = des_encrypt_ofb(src, srclen, dst, key, iv);
-
-	strInOut.Empty();
-	for (i = 0; i < dstlen; i++)
-	{
-		swprintf_s(szTemp, _T("%02X"), dst[i]);
-		strInOut += szTemp;
-	}
-
-	LocalFree(dst);
-	delete[] src;
-	_tsetlocale(LC_ALL, _T("C"));
-}
-
 // ğàñøèôğîâûâàåì ñòğîêó "str" ïî êëş÷ó "key"
 static void decodeStr(CString cryptokey, CString& strInOut)
 {
-	//return;
 	if (cryptokey.IsEmpty() || strInOut.IsEmpty())
 		return;
 	_tsetlocale(LC_ALL, _T("ru_UA.UTF-8"));
 	unsigned char sha1[20];
 	std::string keymb = get_utf8(cryptokey.GetString());
 	sha1encode_str((char*)keymb.c_str(), sha1);
-	//sha1encode_wcs((LPTSTR)(LPCTSTR)cryptokey, sha1);
 	CString key_str; key_str.Format(_T("%02X%02X%02X%02X%02X%02X%02X%02X"), sha1[0], sha1[1], sha1[2], sha1[3], sha1[4], sha1[5], sha1[6], sha1[7]);
 	CString iv_str; iv_str.Format(_T("%02X%02X%02X%02X%02X%02X%02X%02X"), sha1[19], sha1[18], sha1[17], sha1[16], sha1[15], sha1[14], sha1[13], sha1[12]);
 	ulong64 key, iv;
@@ -139,15 +96,71 @@ static void decodeStr(CString cryptokey, CString& strInOut)
 	std::string tmp = (char*)src;
 	std::wstring res = get_utf16(tmp);
 	strInOut = res.c_str();
-	/*WCHAR* sz = new WCHAR[srclen << 1];
-
-	mbstowcs(sz, (char*)src, srclen);
-	strInOut.Format(_T("%s"), sz);
-	delete[] sz;*/
+	strInOut.TrimRight(); // èçáàâëÿåìñÿ îò ëèøíèõ ïğîáåëîâ, êîòîğûå ìîãóò ïîÿâèòüñÿ â ğåçóëüòàòàõ ïîäòàñîâêè
 
 	LocalFree(dst);
 	LocalFree(src);
 	_tsetlocale(LC_ALL, _T("C"));
+}
+
+// øèôğóåì ñòğîêó "str" ïî êëş÷ó "key"
+static void encodeStr(CString cryptokey, CString& strInOut)
+{
+	if (cryptokey.IsEmpty() || strInOut.IsEmpty())
+		return;
+	// èäåÿ òàêàÿ. íóæíî ïğîâåğÿòü âîçìîæíîñòü ğàñêîäèğîâàíèÿ 
+	// (ïàğîëü: test123 òåêñò: 138500  - ıòî íå ğàñøèôğîâûâàåòñÿ. íî, åñëè ê òåêñòó äîáàâèòü ïğîáåë, âñå îê)
+	// åñòåñòâåííî, ıòî êîñÿê êîäà øèôğîâàíèÿ, íî ğàçáèğàòüñÿ ëåíèâî
+	CString etalonStr = strInOut;
+	CString decodedStr = _T("");
+	int index = 0;
+	while (etalonStr.Compare(decodedStr.GetString()) != 0){
+		if (index == 10) {
+			CString errMsg; errMsg.Format(_T("Íå âäàëîñÿ çàøèôğóâàòè \"%s\".\nÄàíó ³íôîğìàö³ş çáåğåãòè íå âäàñòüñÿ."), etalonStr.GetString());
+			AfxMessageBox(errMsg.GetString());
+			return;
+		}
+		strInOut = etalonStr;
+		for (int i = 0; i < index; i++)
+			strInOut.AppendChar(_T(' '));
+
+		_tsetlocale(LC_ALL, _T("ru_UA.UTF-8"));
+		std::string res = get_utf8(strInOut.GetString());
+		unsigned char sha1[20];
+		std::string keymb = get_utf8(cryptokey.GetString());
+		sha1encode_str((char*)keymb.c_str(), sha1);
+		CString key_str; key_str.Format(_T("%02X%02X%02X%02X%02X%02X%02X%02X"), sha1[0], sha1[1], sha1[2], sha1[3], sha1[4], sha1[5], sha1[6], sha1[7]);
+		CString iv_str; iv_str.Format(_T("%02X%02X%02X%02X%02X%02X%02X%02X"), sha1[19], sha1[18], sha1[17], sha1[16], sha1[15], sha1[14], sha1[13], sha1[12]);
+		ulong64 key, iv;
+		_getKeys(key_str, &key, iv_str, &iv);
+
+		int	i, srclen, dstlen;
+		uchar* src, * dst;
+		WCHAR		szTemp[3];
+
+		srclen = (int)res.size() + 1;
+		src = new uchar[srclen];
+		strcpy((char*)src, res.c_str());
+		dst = (uchar*)LocalAlloc(LPTR, i = ((srclen >> 3) + 1) << 3);
+		dstlen = des_encrypt_ofb(src, srclen, dst, key, iv);
+
+		strInOut.Empty();
+		for (i = 0; i < dstlen; i++)
+		{
+			swprintf_s(szTemp, _T("%02X"), dst[i]);
+			strInOut += szTemp;
+		}
+
+		CString codedStr = strInOut; // òóò ëåæèò çàêîäèğîâàííàÿ ñòğîêà
+		LocalFree(dst);
+		delete[] src;
+		_tsetlocale(LC_ALL, _T("C"));
+
+		decodeStr(cryptokey, strInOut);
+		decodedStr = strInOut;
+		strInOut = codedStr;
+		index++;
+	}
 }
 
 static std::wstring Int2Str(int data)
@@ -206,7 +219,7 @@ static std::wstring Dbl2Str(double data, int prec = 3, bool autoclean = false)
 		//<-
 
 			// ìîæíî êàêèå-òî ïğîâåğêè çíà÷åíèÿ "res"
-		if (autoclean && prec != 0)//added by Alex 
+		if (autoclean && prec != 0) 
 		{
 			int i = (int)_tcslen(res) - 1;
 			while ((i > 0) && (res[i] == _T('0'))) i--;

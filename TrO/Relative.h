@@ -1,7 +1,7 @@
 #pragma once
 #include <atlstr.h>
+#include "sqlite3.h"
 #include <vector>
-#import "EXCEL8.OLB" auto_search auto_rename
 
 class Relative
 {
@@ -23,137 +23,186 @@ public:
 		personId = person_Id;
 	}
 
+	int WriteSQL(sqlite3* db, CString key, int rowpos = 0) {
+		std::string sql;
+		if (this->id == -1) {
+			//insert
+			CString _fio = this->fio;
+			encodeStr(key, _fio);
+			CString _phone = this->phone;
+			encodeStr(key, _phone);
+			CString sql_wchar; sql_wchar.Format(_T("INSERT INTO RELATIVE(NAME, PHONE, PERSON_ID, ROWPOS) VALUES (\'%s\', \'%s\', %d, %d);"),
+				_fio.GetString(), _phone.GetString(), this->personId, rowpos);
+			sql = get_utf8(sql_wchar.GetString());
+			char* errMsg;
+			if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+				sqlite3_free(errMsg);
+				return 1;
+			}
+			this->id = (int)sqlite3_last_insert_rowid(db);
+		}
+		else {
+			//update
+			CString _fio = this->fio;
+			encodeStr(key, _fio);
+			CString _phone = this->phone;
+			encodeStr(key, _phone);
+			CString sql_wchar; sql_wchar.Format(_T("UPDATE RELATIVE SET NAME=\'%s\', PHONE=\'%s\', PERSON_ID=%d, ROWPOS=%d WHERE ID= %d;"),
+				_fio.GetString(), _phone.GetString(), this->personId, rowpos, this->id);
+			sql = get_utf8(sql_wchar.GetString());
+			char* errMsg;
+			if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+				sqlite3_free(errMsg);
+				return 1;
+			}
+		}
+		
+		return 0;
+	}
 };
 
 class Relatives {
 public:
+	sqlite3* db;
 	std::vector<Relative> relatives;
 	Relatives() {
 		relatives.clear();
 	}
 
-	void Read(Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		std::vector<int> emptyRows; emptyRows.clear();
-		try {
-			Excel::RangePtr pRange = sheet->UsedRange;
-			int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-			int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-			if (startRow == endRow && startCol == endCol) {
-				// закладка пустая 
-				return;
-			}
+	int checkTable()
+	{
+		char* errMsg;
+		std::string sql = "CREATE TABLE IF NOT EXISTS RELATIVE("
+			"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+			"NAME TEXT, "
+			"PHONE TEXT, "
+			"PERSON_ID INTEGER, "
+			"ROWPOS INTEGER NOT NULL); ";
 
-			relatives.resize((size_t)(nRows));
-			_variant_t varr = pRange->GetValue2(), val;
-			long iLBound[2] = { 0,0 }, iUBound[2] = { 0,0 };
-			HRESULT hr;
-			_bstr_t str;
-			CString tmp;
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 1, &iLBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 1, &iUBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 2, &iLBound[1]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 2, &iUBound[1]))) throw _com_error(hr);
+		if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+			sqlite3_free(errMsg);
+			return 1;
+		}
 
-			for (i = 0; i <= iUBound[0] - iLBound[0]; i++)
+		return 0;
+	}
+
+	void ReadSQL(CString key) {
+		//USES_CONVERSION;
+		relatives.clear();
+		CString tmp;
+		Relative pOneRelative;
+		sqlite3_stmt* stmt;
+		std::string sql = "SELECT * FROM RELATIVE ORDER BY ROWPOS;";
+		if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+			int colQ = sqlite3_column_count(stmt);
+			int execCode = 0;
+
+			while (sqlite3_step(stmt) == SQLITE_ROW)
 			{
-				for (j = 0; j <= iUBound[1] - iLBound[1]; j++)
-				{
-					long ind[2] = { iLBound[0] + i, iLBound[1] + j };
-					if (FAILED(hr = SafeArrayGetElement(varr.parray, ind, &val))) throw _com_error(hr);
-					try
-					{
-						switch (j) {
-						case 0:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (tmp.IsEmpty()) {
-								emptyRows.push_back(i);
-							}
-							decodeStr(key, tmp);
-							relatives[i].id = Str2Int(tmp.GetString());
-							break;
-						case 1:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							relatives[i].fio = tmp;
-							break;
-						case 2:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							relatives[i].phone = tmp;
-							break;
-						case 3:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							relatives[i].personId = Str2Int(tmp.GetString());;
-							break;
-						}
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 0)).c_str();
+				pOneRelative.id = Str2Int(tmp.GetString());
 
-					}
-					catch (_com_error& er)
-					{ // Если поле имеет недопустимый формат
-						CString s; s.Format(L"Помилка читання RELATIVES. Код: 0x%8X %s [%d, %d]", er.Error(), er.ErrorMessage(), i, j);
-						AfxMessageBox(s, MB_ICONERROR);
-						relatives.clear();
-						return;
-					}
-				}
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 1)).c_str();
+				decodeStr(key, tmp);
+				pOneRelative.fio = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 2)).c_str();
+				decodeStr(key, tmp);
+				pOneRelative.phone = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 3)).c_str();
+				pOneRelative.personId = Str2Int(tmp.GetString());
+
+				relatives.push_back(pOneRelative);
 			}
-		}
-		catch (_com_error& err)
-		{
-			CString s; s.Format(L"Помилка читання RELATIVES. Код: 0x%8X %s [%d, %d]", err.Error(), err.ErrorMessage(), i, j);
-			AfxMessageBox(s, MB_ICONERROR);
-			relatives.clear();
-		}
-		for (int a = 0; a < (int)emptyRows.size(); a++) {
-			std::vector<Relative>::iterator it = relatives.begin();
-			std::advance(it, emptyRows[a]);
-			relatives.erase(it);
+
+			sqlite3_finalize(stmt);
 		}
 	}
 
-	void Write(Excel::_WorkbookPtr book, Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		CString tmp;
-
-		Excel::RangePtr pRange = sheet->UsedRange;
-		int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-		int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-		if (startRow != endRow || startCol != endCol) {
-			// нужно почистить всё 
-			for (i = startRow; i <= endRow; i++) {
-				for (j = startCol; j <= endCol; j++) {
-					pRange = sheet->Cells->Item[i][j];
-					pRange->Value = _T("");
+	int WriteSQL(CString key) {
+		//USES_CONVERSION;
+		//sqlite3_stmt* stmt;
+		std::string sql;
+		for (int i = 0; i < (int)relatives.size(); i++) {
+			if (relatives.at(i).id == -1) {
+				//insert
+				CString _fio = relatives.at(i).fio;
+				encodeStr(key, _fio);
+				CString _phone = relatives.at(i).phone;
+				encodeStr(key, _phone);
+				CString sql_wchar; sql_wchar.Format(_T("INSERT INTO RELATIVE(NAME, PHONE, PERSON_ID, ROWPOS) VALUES (\'%s\', \'%s\', %d, %d);"),
+					_fio.GetString(), _phone.GetString(), relatives.at(i).personId, i);
+				sql = get_utf8(sql_wchar.GetString());
+				char* errMsg;
+				if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+					sqlite3_free(errMsg);
+					return 1;
+				}
+				relatives[i].id = (int)sqlite3_last_insert_rowid(db);
+			}
+			else {
+				//update
+				CString _fio = relatives.at(i).fio;
+				encodeStr(key, _fio);
+				CString _phone = relatives.at(i).phone;
+				encodeStr(key, _phone);
+				CString sql_wchar; sql_wchar.Format(_T("UPDATE RELATIVE SET NAME=\'%s\', PHONE=\'%s\', PERSON_ID=%d, ROWPOS=%d WHERE ID= %d;"),
+					_fio.GetString(), _phone.GetString(), relatives.at(i).personId, i, relatives.at(i).id);
+				sql = get_utf8(sql_wchar.GetString());
+				char* errMsg;
+				if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+					sqlite3_free(errMsg);
+					return 1;
 				}
 			}
 		}
+		return 0;
+	}
 
-		for (i = 0; i < (long)relatives.size(); i++) {
-			tmp = Int2Str(relatives[i].id).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][1];
-			pRange->Value = tmp.GetString();
+	int DeleteSQL(std::vector<int> ids2del)
+	{
+		for (int i = 0; i < (int)ids2del.size(); i++) {
+			if (ids2del.at(i) == -1)
+				continue;
 
-			tmp = relatives[i].fio;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][2];
-			pRange->Value = tmp.GetString();
+			sqlite3_stmt* stmt;
+			std::string sql = "DELETE FROM RELATIVE WHERE ID=?;";
+			if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+				return 1;
+			}
 
-			tmp = relatives[i].phone;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][3];
-			pRange->Value = tmp.GetString();
+			sqlite3_bind_int(stmt, 1, ids2del.at(i));
 
-			tmp = Int2Str(relatives[i].personId).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][4];
-			pRange->Value = tmp.GetString();
+			if (sqlite3_step(stmt) != SQLITE_DONE) {
+				sqlite3_finalize(stmt);
+				return 1;
+			}
+
+			sqlite3_finalize(stmt);
 		}
+		return 0;
+	}
 
-		book->Save();
+	int DeleteSQL_4Person(int personId)
+	{
+		if (personId > 0) {
+			sqlite3_stmt* stmt;
+			std::string sql = "DELETE FROM RELATIVE WHERE PERSON_ID=?;";
+			if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+				return 1;
+			}
+
+			sqlite3_bind_int(stmt, 1, personId);
+
+			if (sqlite3_step(stmt) != SQLITE_DONE) {
+				sqlite3_finalize(stmt);
+				return 1;
+			}
+
+			sqlite3_finalize(stmt);
+		}
+		return 0;
 	}
 };

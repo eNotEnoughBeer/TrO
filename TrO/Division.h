@@ -1,7 +1,7 @@
 #pragma once
 #include <atlstr.h>
 #include <vector>
-#import "EXCEL8.OLB" auto_search auto_rename
+#include "sqlite3.h"
 
 class Divizion
 {
@@ -27,132 +27,154 @@ public:
 
 class Divizions {
 public:
+	sqlite3* db;
 	std::vector<Divizion> divisions;
 	Divizions() {
 		divisions.clear();
 	}
 
-	void Read(Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		std::vector<int> emptyRows; emptyRows.clear();
-		try {
-			Excel::RangePtr pRange = sheet->UsedRange;
-			int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-			int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-			if (startRow == endRow && startCol == endCol) {
-				// закладка пустая 
-				return;
-			}
+	int checkTable()
+	{
+		char* errMsg;
+		std::string sql = "CREATE TABLE IF NOT EXISTS DIVIZION("
+			"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+			"NAME TEXT, "
+			"ROTA_ID INTEGER, "
+			"VZVOD_ID INTEGER, "
+			"ROWPOS INTEGER NOT NULL); ";
 
-			divisions.resize((size_t)(nRows));
-			_variant_t varr = pRange->GetValue2(), val;
-			long iLBound[2] = { 0,0 }, iUBound[2] = { 0,0 };
-			HRESULT hr;
-			_bstr_t str;
-			CString tmp;
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 1, &iLBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 1, &iUBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 2, &iLBound[1]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 2, &iUBound[1]))) throw _com_error(hr);
+		if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+			sqlite3_free(errMsg);
+			return 1;
+		}
 
-			for (i = 0; i <= iUBound[0] - iLBound[0]; i++)
+		return 0;
+	}
+
+	void ReadSQL(CString key) {
+		USES_CONVERSION;
+		divisions.clear();
+		CString tmp;
+		Divizion pOneDivizion;
+		sqlite3_stmt* stmt;
+		std::string sql = "SELECT * FROM DIVIZION ORDER BY ROWPOS";
+		if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+			int colQ = sqlite3_column_count(stmt);
+			int execCode = 0;
+
+			while (sqlite3_step(stmt) == SQLITE_ROW)
 			{
-				for (j = 0; j <= iUBound[1] - iLBound[1]; j++)
-				{
-					long ind[2] = { iLBound[0] + i, iLBound[1] + j };
-					if (FAILED(hr = SafeArrayGetElement(varr.parray, ind, &val))) throw _com_error(hr);
-					try
-					{
-						switch (j) {
-						case 0:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (tmp.IsEmpty()) {
-								emptyRows.push_back(i);
-							}
-							decodeStr(key, tmp);
-							divisions[i].id = Str2Int(tmp.GetString());
-							break;
-						case 1:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							divisions[i].name = tmp;
-							break;
-						case 2:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							divisions[i].rotaId = Str2Int(tmp.GetString());
-							break;
-						case 3:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							divisions[i].vzvodId = Str2Int(tmp.GetString());
-							break;
-						}
-					}
-					catch (_com_error& er)
-					{ // Если поле имеет недопустимый формат
-						CString s; s.Format(L"Помилка читання DIVISIONS. Код: 0x%8X %s [%d, %d]", er.Error(), er.ErrorMessage(), i, j);
-						AfxMessageBox(s, MB_ICONERROR);
-						divisions.clear();
-						return;
-					}
-				}
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 0));
+				pOneDivizion.id = Str2Int(tmp.GetString());
+
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 1));
+				decodeStr(key, tmp);
+				pOneDivizion.name = tmp;
+
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 2));
+				pOneDivizion.rotaId = Str2Int(tmp.GetString());
+
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 3));
+				pOneDivizion.vzvodId = Str2Int(tmp.GetString());
+
+				divisions.push_back(pOneDivizion);
 			}
-		}
-		catch (_com_error& err)
-		{
-			CString s; s.Format(L"Помилка читання DIVISIONS. Код: 0x%8X %s [%d, %d]", err.Error(), err.ErrorMessage(), i, j);
-			AfxMessageBox(s, MB_ICONERROR);
-			divisions.clear();
-		}
-		for (int a = 0; a < (int)emptyRows.size(); a++) {
-			std::vector<Divizion>::iterator it = divisions.begin();
-			std::advance(it, emptyRows[a]);
-			divisions.erase(it);
+
+			sqlite3_finalize(stmt);
 		}
 	}
 
-	void Write(Excel::_WorkbookPtr book, Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		CString tmp;
+	int WriteSQL(CString key) {
+		USES_CONVERSION;
+		sqlite3_stmt* stmt;
+		std::string sql;
+		for (int i = 0; i < (int)divisions.size(); i++) {
+			if (divisions.at(i).id < 0) {
+				//insert
+				sql = "INSERT INTO DIVIZION(NAME, ROTA_ID, VZVOD_ID, ROWPOS) VALUES (?, ?, ?, ?);";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
+				}
 
-		Excel::RangePtr pRange = sheet->UsedRange;
-		int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-		int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-		if (startRow != endRow || startCol != endCol) {
-			// нужно почистить всё 
-			for (i = startRow; i <= endRow; i++) {
-				for (j = startCol; j <= endCol; j++) {
-					pRange = sheet->Cells->Item[i][j];
-					pRange->Value = _T("");
+				CString tmp = divisions.at(i).name;
+				encodeStr(key, tmp);
+				std::string name_str = CW2A(tmp.GetString());
+				sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+
+				sqlite3_bind_int(stmt, 2, divisions.at(i).rotaId);
+				sqlite3_bind_int(stmt, 3, divisions.at(i).vzvodId);
+				sqlite3_bind_int(stmt, 4, i);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+				int previousId = divisions.at(i).id;
+				divisions[i].id = (int)sqlite3_last_insert_rowid(db);
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
+
+				for (int a = 0; a < (int)divisions.size(); a++) {
+					if (previousId == divisions.at(a).rotaId) {
+						divisions[a].rotaId = divisions.at(i).id;
+					}
+					if (previousId == divisions.at(a).vzvodId) {
+						divisions[a].vzvodId = divisions.at(i).id;
+					}
 				}
 			}
+			else {
+				//update
+				sql = "UPDATE DIVIZION SET NAME=?, ROTA_ID=?, VZVOD_ID=?, ROWPOS=? WHERE ID= ?";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
+				}
+
+				CString tmp = divisions.at(i).name;
+				encodeStr(key, tmp);
+				std::string name_str = CW2A(tmp.GetString());
+				sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+
+				
+				sqlite3_bind_int(stmt, 2, divisions.at(i).rotaId);
+				sqlite3_bind_int(stmt, 3, divisions.at(i).vzvodId);
+				sqlite3_bind_int(stmt, 4, i);
+				sqlite3_bind_int(stmt, 5, divisions.at(i).id);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
+			}
 		}
+		return 0;
+	}
 
-		for (i = 0; i < (long)divisions.size(); i++) {
-			tmp = Int2Str(divisions[i].id).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][1];
-			pRange->Value = tmp.GetString();
+	int DeleteSQL(std::vector<int> ids2del)
+	{
+		for (int i = 0; i < (int)ids2del.size(); i++) {
+			if (ids2del.at(i) < 0)
+				continue;
 
-			tmp = divisions[i].name;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][2];
-			pRange->Value = tmp.GetString();
+			// собственно удаление
+			sqlite3_stmt* stmt;
+			std::string sql = "DELETE FROM DIVIZION WHERE ID=?";
+			if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+				return 1;
+			}
 
-			tmp = Int2Str(divisions[i].rotaId).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][3];
-			pRange->Value = tmp.GetString();
+			sqlite3_bind_int(stmt, 1, ids2del.at(i));
 
-			tmp = Int2Str(divisions[i].vzvodId).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][4];
-			pRange->Value = tmp.GetString();
+			if (sqlite3_step(stmt) != SQLITE_DONE) {
+				sqlite3_finalize(stmt);
+				return 1;
+			}
+
+			sqlite3_reset(stmt);
+			sqlite3_clear_bindings(stmt);
 		}
-
-		book->Save();
+		return 0;
 	}
 };

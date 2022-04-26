@@ -20,6 +20,7 @@ class PersonDlg : public CDialog
 	DECLARE_DYNAMIC(PersonDlg)
 
 public:
+	std::vector<int>delIdsRelatives;
 	MainLogic* pLogic;
 	Person* pPerson;
 	std::vector<Relative> * rels;

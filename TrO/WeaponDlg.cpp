@@ -41,7 +41,7 @@ BOOL WeaponDlg::OnInitDialog()
 	pSection->SetCaption(_T("Тип озброєння"));
 	m_grid.GetHeader()->SetSectionHeight(24);
 	m_grid.SetAllowEdit();
-	m_grid.SetRowCount((int)pLogic->pWeaponTypes.weaponTypes.size());
+	m_grid.SetRowCount((int)pLogic->pWeapons.pWeapons.size());
 	m_grid.SetAlwaysSelected();
 
 	iColumn = m_gridNum.AddColumn(_T(""), 215);
@@ -50,32 +50,20 @@ BOOL WeaponDlg::OnInitDialog()
 	pSection->SetCaption(_T("Серiйний номер"));
 	m_gridNum.GetHeader()->SetSectionHeight(24);
 	m_gridNum.SetAllowEdit();
-	int typeId = pLogic->pWeaponTypes.weaponTypes.empty() ? -1 : pLogic->pWeaponTypes.weaponTypes[0].id;
-	m_gridNum.SetRowCount(WeaponQuantityForType(typeId));
+	int count = pLogic->pWeapons.pWeapons.empty() ? 0 : (int)pLogic->pWeapons.pWeapons[0].pWeaponNumbers.size();
+	m_gridNum.SetRowCount(count);
 	m_gridNum.SetAlwaysSelected();
+	delIdsTypes.clear();
+	delIdsNums.clear();
 	return TRUE;
-}
-
-int WeaponDlg::WeaponQuantityForType(int typeId)
-{
-	pTmpNums.weaponNums.clear();
-	if (typeId == -1) return 0;
-	int count = 0;
-	for (int i = 0; i < (int)pLogic->pWeaponNums.weaponNums.size(); i++) {
-		if (pLogic->pWeaponNums.weaponNums[i].typeId == typeId) {
-			pTmpNums.weaponNums.push_back(pLogic->pWeaponNums.weaponNums[i]);
-			count++;
-		}
-	}
-	return count;
 }
 
 void WeaponDlg::OnChangeGrid(LPNMHDR lpNMHDR, LRESULT* pResult)
 {
 	VG_DISPINFO* pDispInfo = reinterpret_cast<VG_DISPINFO*>(lpNMHDR);
-	std::vector<WeaponType>::const_iterator it = pLogic->pWeaponTypes.weaponTypes.begin();
+	std::vector<WeaponType>::const_iterator it = pLogic->pWeapons.pWeapons.begin();
 	std::advance(it, pDispInfo->item.iRow);
-	m_gridNum.SetRowCount(WeaponQuantityForType(it->id));
+	m_gridNum.SetRowCount((int)it->pWeaponNumbers.size());
 	m_grid.InvalidateGrid();
 	m_gridNum.InvalidateGrid();
 }
@@ -83,15 +71,15 @@ void WeaponDlg::OnChangeGrid(LPNMHDR lpNMHDR, LRESULT* pResult)
 void WeaponDlg::OnGetDispinfoGrid(LPNMHDR lpNMHDR, LRESULT* pResult)
 {
 	VG_DISPINFO* pDispInfo = reinterpret_cast<VG_DISPINFO*>(lpNMHDR);
-	if (pLogic->pWeaponTypes.weaponTypes.size() == 0)
+	if (pLogic->pWeapons.pWeapons.size() == 0)
 		return;
-	std::vector<WeaponType>::const_iterator it = pLogic->pWeaponTypes.weaponTypes.begin();
+	std::vector<WeaponType>::const_iterator it = pLogic->pWeapons.pWeapons.begin();
 	std::advance(it, pDispInfo->item.iRow);
 
 	wchar_t szBuf[256] = _T("\0");
 	switch (pDispInfo->item.iColumn)
 	{
-	case 0:	// запрос
+	case 0:	
 		wcscpy(szBuf, it->name.GetString());
 		pDispInfo->item.pszText = szBuf;
 		break;
@@ -101,11 +89,11 @@ void WeaponDlg::OnGetDispinfoGrid(LPNMHDR lpNMHDR, LRESULT* pResult)
 void WeaponDlg::OnSetDispinfoGrid(LPNMHDR lpNMHDR, LRESULT* pResult)
 {
 	VG_DISPINFO* pDispInfo = reinterpret_cast<VG_DISPINFO*>(lpNMHDR);
-	if (pLogic->pWeaponTypes.weaponTypes.size() == 0)
+	if (pLogic->pWeapons.pWeapons.size() == 0)
 		return;
 	wchar_t szBuf[256];
 
-	std::vector<WeaponType>::iterator it; it = pLogic->pWeaponTypes.weaponTypes.begin();
+	std::vector<WeaponType>::iterator it; it = pLogic->pWeapons.pWeapons.begin();
 	std::advance(it, pDispInfo->item.iRow);
 	switch (pDispInfo->item.iColumn)
 	{
@@ -122,17 +110,17 @@ void WeaponDlg::OnBnClickedAdd()
 	m_grid.PressReturn();
 	m_gridNum.PressReturn();
 	CGridCell cell = m_grid.GetCellFocused();
-	WeaponType pNewOne(pLogic->ids.weptype_id++, _T(""));
+	WeaponType pNewOne(-1, _T(""));
 	if (m_grid.GetRowCount() == 0) {
-		pLogic->pWeaponTypes.weaponTypes.push_back(pNewOne);
+		pLogic->pWeapons.pWeapons.push_back(pNewOne);
 	}
 	else {
-		std::vector<WeaponType>::iterator it = pLogic->pWeaponTypes.weaponTypes.begin();
+		std::vector<WeaponType>::iterator it = pLogic->pWeapons.pWeapons.begin();
 		std::advance(it, cell.m_iRow);
-		pLogic->pWeaponTypes.weaponTypes.insert(it, pNewOne);
+		pLogic->pWeapons.pWeapons.insert(it, pNewOne);
 	}
 	m_grid.SetRowCount(m_grid.GetRowCount() + 1);
-	m_gridNum.SetRowCount(WeaponQuantityForType(pNewOne.id));
+	m_gridNum.SetRowCount((int)pNewOne.pWeaponNumbers.size());
 	m_gridNum.InvalidateGrid();
 }
 
@@ -143,10 +131,10 @@ void WeaponDlg::OnKeyDownGridResect(LPNMHDR lpNMHDR, LRESULT* pResult)
 	CGridCell cell = m_grid.GetCellFocused();
 	if (lpNMKey->nVKey == VK_DOWN && cell.m_iRow == m_grid.GetRowCount() - 1)
 	{
-		WeaponType pNewOne(pLogic->ids.weptype_id++, _T(""));
-		pLogic->pWeaponTypes.weaponTypes.push_back(pNewOne);
+		WeaponType pNewOne(-1, _T(""));
+		pLogic->pWeapons.pWeapons.push_back(pNewOne);
 		m_grid.SetRowCount(m_grid.GetRowCount() + 1);
-		m_gridNum.SetRowCount(WeaponQuantityForType(pNewOne.id));
+		m_gridNum.SetRowCount((int)pNewOne.pWeaponNumbers.size());
 		m_gridNum.InvalidateGrid();
 	}
 }
@@ -155,25 +143,25 @@ void WeaponDlg::OnBnClickedDel()
 {
 	m_grid.PressReturn();
 	m_gridNum.PressReturn();
-	if (pLogic->pWeaponTypes.weaponTypes.size() < 1) {
+	if (pLogic->pWeapons.pWeapons.size() < 1) {
 		return;
 	}
 
-	std::vector<WeaponType>::iterator it;	it = pLogic->pWeaponTypes.weaponTypes.begin();
+	std::vector<WeaponType>::iterator it;	it = pLogic->pWeapons.pWeapons.begin();
 	std::advance(it, m_grid.GetCellFocused().m_iRow);
-	// проверка на использование в WEPNUM. и если свободен, удалить
+	// проверка на наличие табельнх номеров, если пусто - можно удалить
 	bool canDelete = true;
-	for (int i = 0; i < (int)pLogic->pWeaponNums.weaponNums.size(); i++) {
-		if (it->id == pLogic->pWeaponNums.weaponNums[i].typeId) {
-			canDelete = false;
-			break;
-		}
+	if (!it->pWeaponNumbers.empty()) {
+		canDelete = false;
 	}
+	
 	if (canDelete) {
-		pLogic->pWeaponTypes.weaponTypes.erase(it);
+		delIdsTypes.push_back(it->id);
+		pLogic->pWeapons.pWeapons.erase(it);
 		m_grid.SetRowCount(m_grid.GetRowCount() - 1);
 		m_grid.InvalidateGrid();
-		m_gridNum.SetRowCount(WeaponQuantityForType(pLogic->pWeaponTypes.weaponTypes[m_grid.GetCellFocused().m_iRow].id));
+		int count = pLogic->pWeapons.pWeapons.empty() ? 0 : (int)pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.size();
+		m_gridNum.SetRowCount(count);
 		m_gridNum.InvalidateGrid();
 	}
 	else {
@@ -184,15 +172,15 @@ void WeaponDlg::OnBnClickedDel()
 void WeaponDlg::OnGetDispinfoGridNum(LPNMHDR lpNMHDR, LRESULT* pResult)
 {
 	VG_DISPINFO* pDispInfo = reinterpret_cast<VG_DISPINFO*>(lpNMHDR);
-	if (pTmpNums.weaponNums.size() == 0)
+	if ((int)pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.size() == 0)
 		return;
-	std::vector<WeaponNum>::const_iterator it = pTmpNums.weaponNums.begin();
+	std::vector<WeaponNumber>::const_iterator it = pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.begin();
 	std::advance(it, pDispInfo->item.iRow);
 
 	wchar_t szBuf[256] = _T("\0");
 	switch (pDispInfo->item.iColumn)
 	{
-	case 0:	// запрос
+	case 0:	
 		wcscpy(szBuf, it->name.GetString());
 		pDispInfo->item.pszText = szBuf;
 		break;
@@ -202,24 +190,17 @@ void WeaponDlg::OnGetDispinfoGridNum(LPNMHDR lpNMHDR, LRESULT* pResult)
 void WeaponDlg::OnSetDispinfoGridNum(LPNMHDR lpNMHDR, LRESULT* pResult)
 {
 	VG_DISPINFO* pDispInfo = reinterpret_cast<VG_DISPINFO*>(lpNMHDR);
-	if (pTmpNums.weaponNums.size() == 0)
+	if ((int)pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.size() == 0)
 		return;
 	wchar_t szBuf[256];
 
-	std::vector<WeaponNum>::iterator it; it = pTmpNums.weaponNums.begin();
+	std::vector<WeaponNumber>::iterator it; it = pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.begin();
 	std::advance(it, pDispInfo->item.iRow);
 	switch (pDispInfo->item.iColumn)
 	{
 	case 0:
 		wcscpy(szBuf, pDispInfo->item.pszText);
 		it->name = szBuf;
-		// а теперь утянуть изменения в настоящий массив
-		for (int i = 0; i < (int)pLogic->pWeaponNums.weaponNums.size(); i++) {
-			if (it->id == pLogic->pWeaponNums.weaponNums[i].id) {
-				pLogic->pWeaponNums.weaponNums[i].name = szBuf;
-				break;
-			}
-		}
 		break;
 	}
 	m_grid.InvalidateGrid();
@@ -232,12 +213,8 @@ void WeaponDlg::OnKeyDownGridResectNum(LPNMHDR lpNMHDR, LRESULT* pResult)
 	CGridCell cell = m_gridNum.GetCellFocused();
 	if (lpNMKey->nVKey == VK_DOWN && cell.m_iRow == m_gridNum.GetRowCount() - 1)
 	{
-		std::vector<WeaponType>::iterator it;	it = pLogic->pWeaponTypes.weaponTypes.begin();
-		std::advance(it, m_grid.GetCellFocused().m_iRow);
-
-		WeaponNum pNewOne(pLogic->ids.wepnum_id++, it->id, _T(""));
-		pLogic->pWeaponNums.weaponNums.push_back(pNewOne);
-		pTmpNums.weaponNums.push_back(pNewOne);
+		WeaponNumber pNewOne(-1, _T(""));
+		pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.push_back(pNewOne);
 		m_gridNum.SetRowCount(m_gridNum.GetRowCount() + 1);
 	}
 }
@@ -246,6 +223,15 @@ void WeaponDlg::OnBnClickedOk()
 {
 	m_grid.PressReturn();
 	m_gridNum.PressReturn();
+
+	int res = pLogic->pWeapons.WriteSQL(pLogic->encriptionKey);
+	res += pLogic->pWeapons.DeleteSQLType(delIdsTypes);
+	res += pLogic->pWeapons.DeleteSQLNumber(delIdsNums);
+	if (res > 0) {
+		AfxMessageBox(_T("Виникли проблеми із каталогом зброї"));
+	}
+	
+	pLogic->pWeapons.ReadSQL(pLogic->encriptionKey);
 	CDialog::OnOK();
 }
 
@@ -253,33 +239,22 @@ void WeaponDlg::OnBnClickedAddnum()
 {
 	m_grid.PressReturn();
 	m_gridNum.PressReturn();
-	if (pLogic->pWeaponTypes.weaponTypes.empty()) {
+	if (pLogic->pWeapons.pWeapons.empty()) {
 		AfxMessageBox(_T("Спочатку потрібно додати тип озброєння"));
 		return;
 	}
 	CGridCell cell = m_gridNum.GetCellFocused();
-	std::vector<WeaponType>::iterator itType;	itType = pLogic->pWeaponTypes.weaponTypes.begin();
+	std::vector<WeaponType>::iterator itType;	itType = pLogic->pWeapons.pWeapons.begin();
 	std::advance(itType, m_grid.GetCellFocused().m_iRow);
 
-	WeaponNum pNewOne(pLogic->ids.wepnum_id++, itType->id, _T(""));
+	WeaponNumber pNewOne(-1, _T(""));
 	if (m_gridNum.GetRowCount() == 0) {
-		pTmpNums.weaponNums.push_back(pNewOne);
-		pLogic->pWeaponNums.weaponNums.push_back(pNewOne);
+		itType->pWeaponNumbers.push_back(pNewOne);
 	}
 	else {
-		std::vector<WeaponNum>::iterator it = pTmpNums.weaponNums.begin();
+		std::vector<WeaponNumber>::iterator it = pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.begin();
 		std::advance(it, cell.m_iRow);
-		// а теперь в основной массив
-		for (int i = 0; i < (int)pLogic->pWeaponNums.weaponNums.size(); i++) {
-			if (it->id == pLogic->pWeaponNums.weaponNums[i].id) {
-				std::vector<WeaponNum>::iterator itInsert = pLogic->pWeaponNums.weaponNums.begin();
-				std::advance(itInsert, i);
-				pLogic->pWeaponNums.weaponNums.insert(itInsert, pNewOne);
-				break;
-			}
-		}
-		// ну и во временный массив
-		pTmpNums.weaponNums.insert(it, pNewOne);
+		pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.insert(it, pNewOne);
 	}
 	m_gridNum.SetRowCount(m_gridNum.GetRowCount() + 1);
 }
@@ -288,13 +263,14 @@ void WeaponDlg::OnBnClickedDelnum()
 {
 	m_grid.PressReturn();
 	m_gridNum.PressReturn();
-	if (pTmpNums.weaponNums.size() < 1) {
+	int count = pLogic->pWeapons.pWeapons.empty() ? 0 : (int)pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.size();
+	if (count < 1) {
 		return;
 	}
 
-	std::vector<WeaponNum>::iterator it;	it = pTmpNums.weaponNums.begin();
+	std::vector<WeaponNumber>::iterator it;	it = pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.begin();
 	std::advance(it, m_gridNum.GetCellFocused().m_iRow);
-	// проверка на использование в WEPNUM. и если свободен, удалить
+	// проверка на использование в PERSON. и если свободен, удалить
 	bool canDelete = true;
 	for (int i = 0; i < (int)pLogic->pPersons.persons.size(); i++) {
 		for (int j = 0; j < (int)pLogic->pPersons.persons[i].weapons.size(); j++) {
@@ -305,21 +281,13 @@ void WeaponDlg::OnBnClickedDelnum()
 		}
 	}
 	if (canDelete) {
-		for (int i = 0; i < (int)pLogic->pWeaponNums.weaponNums.size(); i++) {
-			if (it->id == pLogic->pWeaponNums.weaponNums[i].id) {
-				std::vector<WeaponNum>::iterator itDel = pLogic->pWeaponNums.weaponNums.begin();
-				std::advance(itDel, i);
-				pLogic->pWeaponNums.weaponNums.erase(itDel);
-				break;
-			}
-		}
-
-		pTmpNums.weaponNums.erase(it);
+		delIdsNums.push_back(it->id);
+		pLogic->pWeapons.pWeapons[m_grid.GetCellFocused().m_iRow].pWeaponNumbers.erase(it);
 		m_gridNum.SetRowCount(m_gridNum.GetRowCount() - 1);
 		m_gridNum.Invalidate();
 	}
 	else {
-		AfxMessageBox(_T("За даним типом озброєння закрiплено кiлька одиниць зброї."));
+		AfxMessageBox(_T("Зброя закріплена за одним з бійців."));
 	}
 }
 

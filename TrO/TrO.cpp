@@ -5,10 +5,7 @@
 #include "PasswordDlg.h"
 #include "MainLogic.h"
 
-//#include "PositDlg.h"
-//#include "RankDlg.h"
-//#include "WeaponDlg.h"
-//#include "DivizionDlg.h"
+#include "HelperFunctions.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -34,24 +31,18 @@ BOOL CTrOApp::InitInstance()
 	SetRegistryKey(_T("Local AppWizard-Generated Applications"));
 
 	MainLogic pData;
+	pData.Connect();
 	PasswordDlg dlg;
 	dlg.pAllData = &pData;
+	dlg.myPass.db = pData.db;
 	INT_PTR nResponse = dlg.DoModal();
 	if (nResponse == IDOK){
 		// прочитать всю БД в оперативку
-		pData.connectXLS();
-		pData.Read();
+		pData.ReadSQL();
 		CTrODlg dlg;
 		dlg.pLogic = &pData;
 		m_pMainWnd = &dlg;
 		nResponse = dlg.DoModal();
-		// обновить данные в файле, если ползатель нажмет OK
-		//if (IDYES != ::MessageBox(0,_T("Оновити данi в БД?"),_T("Увага"),MB_YESNO))
-		pData.Write();
-		pData.freeXLS();
-	}
-	else if (nResponse == IDCANCEL){
-		//...
 	}
 
 	if (pShellManager != nullptr){

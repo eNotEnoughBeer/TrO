@@ -18,6 +18,8 @@ class DivizionDlg : public CDialog
 	DECLARE_DYNAMIC(DivizionDlg)
 
 public:
+	int newRecordIndex;
+	std::vector<int> delIds;
 	MainLogic* pLogic;
 	std::vector<ID_NAME> rota;
 	std::vector<ID_NAME> vzvod;

@@ -2,7 +2,6 @@
 #include <atlstr.h>
 #include "VirtualGridCtrl.h"
 #include "MainLogic.h"
-#include "WeaponNum.h"
 
 class WeaponDlg : public CDialog
 {
@@ -10,7 +9,6 @@ class WeaponDlg : public CDialog
 
 public:
 	MainLogic* pLogic;
-	WeaponNums pTmpNums;
 	WeaponDlg(CWnd* pParent = nullptr);   // standard constructor
 	virtual ~WeaponDlg();
 
@@ -24,6 +22,8 @@ protected:
 	virtual BOOL OnInitDialog();
 	DECLARE_MESSAGE_MAP()
 public:
+	std::vector<int> delIdsTypes;
+	std::vector<int> delIdsNums;
 	CVirtualGridCtrl m_grid;
 	CVirtualGridCtrl m_gridNum;
 	void OnGetDispinfoGrid(LPNMHDR lpNMHDR, LRESULT* pResult);
@@ -36,8 +36,6 @@ public:
 	void OnGetDispinfoGridNum(LPNMHDR lpNMHDR, LRESULT* pResult);
 	void OnSetDispinfoGridNum(LPNMHDR lpNMHDR, LRESULT* pResult);
 	void OnKeyDownGridResectNum(LPNMHDR lpNMHDR, LRESULT* pResult);
-
-	int WeaponQuantityForType(int typeId);
 	afx_msg void OnBnClickedDelnum();
 	afx_msg void OnBnClickedAddnum();
 };

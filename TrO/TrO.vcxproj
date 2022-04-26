@@ -205,14 +205,13 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Relative.h" />
     <ClInclude Include="sha1.h" />
+    <ClInclude Include="sqlite3.h" />
     <ClInclude Include="targetver.h" />
     <ClInclude Include="TitleTip.h" />
     <ClInclude Include="TrO.h" />
     <ClInclude Include="TrODlg.h" />
-    <ClInclude Include="UnicIds.h" />
     <ClInclude Include="VirtualGridCtrl.h" />
     <ClInclude Include="WeaponDlg.h" />
-    <ClInclude Include="WeaponNum.h" />
     <ClInclude Include="WeaponType.h" />
   </ItemGroup>
   <ItemGroup>
@@ -231,6 +230,10 @@
     <ClCompile Include="PositDlg.cpp" />
     <ClCompile Include="RankDlg.cpp" />
     <ClCompile Include="sha1.cpp" />
+    <ClCompile Include="sqlite3.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="TitleTip.cpp" />
     <ClCompile Include="TrO.cpp" />
     <ClCompile Include="TrODlg.cpp" />

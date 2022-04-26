@@ -131,7 +131,7 @@ void CTrODlg::OnPaint()
 	}
 }
 
-HCURSOR CTrODlg::OnQueryDragIcon(){return static_cast<HCURSOR>(m_hIcon);}
+HCURSOR CTrODlg::OnQueryDragIcon() { return static_cast<HCURSOR>(m_hIcon); }
 
 void CTrODlg::MenuHandler(UINT id)
 {
@@ -159,28 +159,36 @@ void CTrODlg::addPosition()
 {
 	PositDlg dlg;
 	dlg.pLogic = pLogic;
-	dlg.DoModal();
+	if (IDOK != dlg.DoModal()) {
+		pLogic->pPositions.ReadSQL(pLogic->encriptionKey);
+	}
 }
 
-void CTrODlg::addRank() 
+void CTrODlg::addRank()
 {
 	RankDlg dlg;
 	dlg.pLogic = pLogic;
-	dlg.DoModal();
+	if (IDOK != dlg.DoModal()){
+		pLogic->pRanks.ReadSQL(pLogic->encriptionKey);
+	}
 }
 
 void CTrODlg::addWeapon()
 {
 	WeaponDlg dlg;
 	dlg.pLogic = pLogic;
-	dlg.DoModal();
+	if (IDOK != dlg.DoModal()) {
+		pLogic->pWeapons.ReadSQL(pLogic->encriptionKey);
+	}
 }
 
 void CTrODlg::addDivizion()
 {
 	DivizionDlg dlg;
 	dlg.pLogic = pLogic;
-	dlg.DoModal();
+	if (IDOK != dlg.DoModal()) {
+		pLogic->pDivizions.ReadSQL(pLogic->encriptionKey);
+	}
 }
 
 void CTrODlg::addPerson()
@@ -192,16 +200,18 @@ void CTrODlg::addPerson()
 	dlg.pPerson = &pOne;
 	dlg.rels = &rels;
 	if (IDOK == dlg.DoModal()) {
-		// поставить правильный юникид
-		pOne.id = pLogic->ids.person_id++;
+		// записать в БД
+		pOne.WriteSQL(pLogic->db, pLogic->encriptionKey);
 		// добавить человечка к массиву, обновить грид
 		pLogic->pPersons.persons.push_back(pOne);
 		// та же беда с родственниками
 		for (int i = 0; i < (int)rels.size(); i++) {
-			rels[i].id = pLogic->ids.relative_id++;
+			rels[i].id = -1;
 			rels[i].personId = pOne.id;
+			rels[i].WriteSQL(pLogic->db, pLogic->encriptionKey, i);
 			pLogic->pRelatives.relatives.push_back(rels[i]);
 		}
+		// удаление родственников не предусмотрено, т.к. их еще нет в БД (боец новый)
 		m_grid.SetRowCount((int)pLogic->pPersons.persons.size());
 	}
 }
@@ -307,17 +317,15 @@ CString CTrODlg::rankId2rankName(int id) {
 
 CString CTrODlg::weaponId2fullName(int id) {
 	CString res = _T("");
-	for (int i = 0; i < (int)pLogic->pWeaponNums.weaponNums.size(); i++) {
-		if (id == pLogic->pWeaponNums.weaponNums[i].id) {
-			for (int j = 0; j < (int)pLogic->pWeaponTypes.weaponTypes.size(); j++) {
-				if (pLogic->pWeaponNums.weaponNums[i].typeId == pLogic->pWeaponTypes.weaponTypes[j].id) {
-					res.Format(_T("%s %s"), pLogic->pWeaponTypes.weaponTypes[j].name.GetString(), pLogic->pWeaponNums.weaponNums[i].name.GetString());
-					break;
-				}
+	for (int i = 0; i < (int)pLogic->pWeapons.pWeapons.size(); i++) {
+		for (int j = 0; j < (int)pLogic->pWeapons.pWeapons.at(i).pWeaponNumbers.size(); j++) {
+			if (id == pLogic->pWeapons.pWeapons.at(i).pWeaponNumbers.at(j).id) {
+				res.Format(_T("%s %s"), pLogic->pWeapons.pWeapons.at(i).name.GetString(), pLogic->pWeapons.pWeapons.at(i).pWeaponNumbers.at(j).name.GetString());
+				break;
 			}
-			break;
 		}
 	}
+
 	return res;
 }
 
@@ -375,12 +383,14 @@ void CTrODlg::editPerson()
 			rels.push_back(pLogic->pRelatives.relatives[i]);
 		}
 	}
+	int res = 0;
 	PersonDlg dlg;
 	dlg.pLogic = pLogic;
 	dlg.pPerson = &pOne;
 	dlg.rels = &rels;
 	if (IDOK == dlg.DoModal()) {
 		// вертаем в зад
+		res += pOne.WriteSQL(pLogic->db, pLogic->encriptionKey);
 		pLogic->pPersons.persons[m_grid.GetCellFocused().m_iRow] = pOne;
 		// с родственниками чутка инача. сначала грохнуть всех привязанных в основном векторе
 		for (int i = 0; i < (int)pLogic->pRelatives.relatives.size(); i++) {
@@ -392,17 +402,26 @@ void CTrODlg::editPerson()
 		}
 		// а потом перекинуть в основной вектор всё, что есть в rels
 		for (int i = 0; i < (int)rels.size(); i++) {
-			if (rels[i].id == -1) { // вдруг добавился новый родственник
-				rels[i].id = pLogic->ids.relative_id++;
-			}
+			res += rels[i].WriteSQL(pLogic->db, pLogic->encriptionKey, i);
 			pLogic->pRelatives.relatives.push_back(rels[i]);
 		}
-		m_grid.InvalidateGrid();
+		// вдруг чудик удалил одних родственников и добавил других (вместо редактирования) 
+		res += pLogic->pRelatives.DeleteSQL(dlg.delIdsRelatives);
 	}
+
+	if (res != 0) {
+		AfxMessageBox(_T("Виникли проблеми із видаленням даних"));
+		pLogic->pPersons.ReadSQL(pLogic->encriptionKey);
+		pLogic->pRelatives.ReadSQL(pLogic->encriptionKey);
+	}
+
+	m_grid.SetRowCount((int)pLogic->pPersons.persons.size());
+	m_grid.InvalidateGrid();
 }
 
 void CTrODlg::deletePerson() 
 {
+	int res = 0;
 	CString message; 
 	message.Format(_T("Ви дійсно хочете видалити \"%s\" із бази?"), pLogic->pPersons.persons[m_grid.GetCellFocused().m_iRow].fio.GetString());
 	if (IDYES != MessageBox(message.GetString(), _T("Видалення"), MB_YESNO))	return;
@@ -417,8 +436,16 @@ void CTrODlg::deletePerson()
 			pLogic->pRelatives.relatives.erase(it);
 		}
 	}
-
+	res += pLogic->pRelatives.DeleteSQL_4Person(itPerson->id);
+	res += pLogic->pPersons.DeleteSQL(itPerson->id);
 	pLogic->pPersons.persons.erase(itPerson);
+	
+	if (res != 0) {
+		AfxMessageBox(_T("Виникли проблеми із видаленням даних"));
+		pLogic->pPersons.ReadSQL(pLogic->encriptionKey);
+		pLogic->pRelatives.ReadSQL(pLogic->encriptionKey);
+	}
+
 	m_grid.SetRowCount((int)pLogic->pPersons.persons.size());
 	m_grid.InvalidateGrid();
 }
@@ -444,7 +471,7 @@ std::vector<ID_NAME> CTrODlg::divizionSort()
 
 	// выбираем все роты
 	for (int i = 0; i < (int)pLogic->pDivizions.divisions.size(); i++) {
-		if (pLogic->pDivizions.divisions[i].rotaId == -1 && pLogic->pDivizions.divisions[i].vzvodId == -1) {
+		if (pLogic->pDivizions.divisions[i].rotaId == 0 && pLogic->pDivizions.divisions[i].vzvodId == 0) {
 			ID_NAME pOne(pLogic->pDivizions.divisions[i].id, pLogic->pDivizions.divisions[i].name);
 			rota.push_back(pOne);
 		}
@@ -455,7 +482,7 @@ std::vector<ID_NAME> CTrODlg::divizionSort()
 
 		// выбираем взводы для роты
 		for (int j = 0; j < (int)pLogic->pDivizions.divisions.size(); j++) {
-			if (pLogic->pDivizions.divisions[j].rotaId == rota[i].id && pLogic->pDivizions.divisions[j].vzvodId == -1) {
+			if (pLogic->pDivizions.divisions[j].rotaId == rota[i].id && pLogic->pDivizions.divisions[j].vzvodId == 0) {
 				CString aaa;  aaa.Format(_T("%s %s"), rota[i].name.GetString(), pLogic->pDivizions.divisions[j].name.GetString());
 				ID_NAME pOne(pLogic->pDivizions.divisions[j].id,aaa);
 				result.push_back(pOne);// теперь ставим i-й взвод роты

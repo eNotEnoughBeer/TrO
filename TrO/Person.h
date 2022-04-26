@@ -1,11 +1,11 @@
 #pragma once
 #include <atlstr.h>
+#include "sqlite3.h"
 #include <algorithm>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
-#import "EXCEL8.OLB" auto_search auto_rename
 
 class Person
 {
@@ -62,10 +62,136 @@ public:
 		ubd = _T("");
 		startDate = _T("");
 	}
+
+	CString mas2string(std::vector<int> mas) {
+		CString str; str.Empty();
+		for (int i = 0; i < (int)mas.size(); i++) {
+			str.Append(Int2Str(mas[i]).c_str());
+			if (i != (int)mas.size() - 1) {
+				str.AppendChar(_T(' '));// через символ пробела идут иды
+			}
+		}
+		return str;
+	}
+
+	int WriteSQL(sqlite3* db, CString key) {
+		USES_CONVERSION;
+		std::string sql;
+		std::string _str;
+		CString tmp;
+		if (id == -1) {
+			//insert
+			CString _code = this->code;
+			encodeStr(key, _code);
+			CString _fio = this->fio;
+			encodeStr(key, _fio);
+			CString _callsign = this->callsign;
+			encodeStr(key, _callsign);
+			CString _birthday = this->birthday;
+			encodeStr(key, _birthday);
+			CString _address = this->address;
+			encodeStr(key, _address);
+			CString _phone = this->phone;
+			encodeStr(key, _phone);
+			CString _shoes = Dbl2Str(this->shoesSize, 1).c_str();
+			encodeStr(key, _shoes);
+			CString _clothers = Dbl2Str(this->clothersSize, 1).c_str();
+			encodeStr(key, _clothers);
+			CString _weapon = mas2string(this->weapons);
+			encodeStr(key, _weapon);
+			CString _comment = this->comment;
+			encodeStr(key, _comment);
+			CString _ubd = this->ubd;
+			encodeStr(key, _ubd);
+			CString _stDate = this->startDate;
+			encodeStr(key, _stDate);
+
+			CString sql_wchar; sql_wchar.Format(_T("INSERT INTO PERSON(POS_ID, CDE, R_ID, FIO, CSGN, BRTH, ADDR, PHN, SHS, CLTH, WPN, CMNT, DIV_ID, UDB, STDT) VALUES(%d, \'%s\', %d, \'%s\', \'%s\', \'%s\', \'%s\', \'%s\', \'%s\', \'%s\', \'%s\', \'%s\', %d, \'%s\', \'%s\'); "),
+				this->positionId,
+				_code.GetString(),
+				this->rankId,
+				_fio.GetString(),
+				_callsign.GetString(),
+				_birthday.GetString(),
+				_address.GetString(),
+				_phone.GetString(),
+				_shoes.GetString(),
+				_clothers.GetString(),
+				_weapon.GetString(),
+				_comment.GetString(),
+				this->divizionId,
+				_ubd.GetString(),
+				_stDate.GetString());
+			
+			sql = get_utf8(sql_wchar.GetString());
+			char* errMsg;
+			if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+				sqlite3_free(errMsg);
+				return 1;
+			}
+			this->id = (int)sqlite3_last_insert_rowid(db);
+		}
+		else {
+			//update
+			CString _code = this->code;
+			encodeStr(key, _code);
+			CString _fio = this->fio;
+			encodeStr(key, _fio);
+			CString _callsign = this->callsign;
+			encodeStr(key, _callsign);
+			CString _birthday = this->birthday;
+			encodeStr(key, _birthday);
+			CString _address = this->address;
+			encodeStr(key, _address);
+			CString _phone = this->phone;
+			encodeStr(key, _phone);
+			CString _shoes = Dbl2Str(this->shoesSize, 1).c_str();
+			encodeStr(key, _shoes);
+			CString _clothers = Dbl2Str(this->clothersSize, 1).c_str();
+			encodeStr(key, _clothers);
+			CString _weapon = mas2string(this->weapons);
+			encodeStr(key, _weapon);
+			CString _comment = this->comment;
+			encodeStr(key, _comment);
+			CString _ubd = this->ubd;
+			encodeStr(key, _ubd);
+			CString _stDate = this->startDate;
+			encodeStr(key, _stDate);
+																																									
+			CString sql_wchar; sql_wchar.Format(
+				_T("UPDATE PERSON SET POS_ID=%d, CDE=\'%s\', R_ID=%d, FIO=\'%s\', CSGN=\'%s\', BRTH=\'%s\', ADDR=\'%s\', PHN=\'%s\', SHS=\'%s\', CLTH=\'%s\', WPN=\'%s\', CMNT=\'%s\', DIV_ID=%d, UDB=\'%s\', STDT=\'%s\' WHERE ID=%d; "),
+				this->positionId,
+				_code.GetString(),
+				this->rankId,
+				_fio.GetString(),
+				_callsign.GetString(),
+				_birthday.GetString(),
+				_address.GetString(),
+				_phone.GetString(),
+				_shoes.GetString(),
+				_clothers.GetString(),
+				_weapon.GetString(),
+				_comment.GetString(),
+				this->divizionId,
+				_ubd.GetString(),
+				_stDate.GetString(),
+				this->id);
+
+			sql = get_utf8(sql_wchar.GetString());
+			char* errMsg;
+			if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+				sqlite3_free(errMsg);
+				return 1;
+			}
+		}
+		return 0;
+	}
+	
 };
 
 class Persons {
 public:
+	sqlite3* db;
 	std::vector<Person> persons;
 	Persons() {
 		persons.clear();
@@ -84,293 +210,146 @@ public:
 
 		return mas;
 	}
+	
+	int checkTable()
+	{
+		char* errMsg;
+		std::string sql = "CREATE TABLE IF NOT EXISTS PERSON("
+			"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+			"POS_ID INTEGER, "
+			"CDE TEXT, "
+			"R_ID INTEGER, "
+			"FIO TEXT, "
+			"CSGN TEXT, "
+			"BRTH TEXT, "
+			"ADDR TEXT, "
+			"PHN TEXT, "
+			"SHS TEXT, "
+			"CLTH TEXT, "
+			"WPN TEXT, "
+			"CMNT TEXT, "
+			"DIV_ID INTEGER, "
+			"UDB TEXT, "
+			"STDT TEXT); ";
 
-	CString mas2string(std::vector<int> mas) {
-		CString str; str.Empty();
-		for (int i = 0; i < (int)mas.size(); i++) {
-			str.Append(Int2Str(mas[i]).c_str());
-			if (i != (int)mas.size() - 1) {
-				str.AppendChar(_T(' '));// через символ пробела идут иды
-			}
+		if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+			sqlite3_free(errMsg);
+			return 1;
 		}
-		return str;
+
+		return 0;
+	}
+
+	void ReadSQL(CString key) {
+		USES_CONVERSION;
+		persons.clear();
+		CString tmp;
+		Person pOnePerson;
+		sqlite3_stmt* stmt;
+		std::string sql = "SELECT * FROM PERSON ORDER BY ID";
+		if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+			int colQ = sqlite3_column_count(stmt);
+			int execCode = 0;
+
+			while (sqlite3_step(stmt) == SQLITE_ROW)
+			{
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 0)).c_str();
+				pOnePerson.id = Str2Int(tmp.GetString());
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 1)).c_str();
+				pOnePerson.positionId = Str2Int(tmp.GetString());
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 2)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.code = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 3)).c_str();
+				pOnePerson.rankId = Str2Int(tmp.GetString());
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 4)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.fio= tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 5)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.callsign = tmp;
+				
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 6)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.birthday = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 7)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.address = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 8)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.phone = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 9)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.shoesSize = Str2Dbl(tmp);
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 10)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.clothersSize = Str2Dbl(tmp);
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 11)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.weapons = string2mas(tmp);
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 12)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.comment = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 13)).c_str();
+				pOnePerson.divizionId = Str2Int(tmp.GetString());
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 14)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.ubd = tmp;
+
+				tmp = get_utf16((char*)sqlite3_column_text(stmt, 15)).c_str();
+				decodeStr(key, tmp);
+				pOnePerson.startDate = tmp;
+
+				persons.push_back(pOnePerson);
+			}
+
+			sqlite3_finalize(stmt);
+		}
 	}
 	
-	void Read(Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		std::vector<int> emptyRows; emptyRows.clear();
-		try {
-			Excel::RangePtr pRange = sheet->UsedRange;
-			int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-			int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-			if (startRow == endRow && startCol == endCol) {
-				// закладка пустая 
-				return;
-			}
-
-			persons.resize((size_t)(nRows));
-			_variant_t varr = pRange->GetValue2(), val;
-			long iLBound[2] = { 0,0 }, iUBound[2] = { 0,0 };
-			HRESULT hr;
-			_bstr_t str;
-			CString tmp;
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 1, &iLBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 1, &iUBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 2, &iLBound[1]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 2, &iUBound[1]))) throw _com_error(hr);
-
-			for (i = 0; i <= iUBound[0] - iLBound[0]; i++)
-			{
-				for (j = 0; j <= iUBound[1] - iLBound[1]; j++)
-				{
-					long ind[2] = { iLBound[0] + i, iLBound[1] + j };
-					if (FAILED(hr = SafeArrayGetElement(varr.parray, ind, &val))) throw _com_error(hr);
-					try
-					{
-						
-						switch (j) {
-						case 0:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (tmp.IsEmpty()) {
-								emptyRows.push_back(i);
-							}
-							else {
-								decodeStr(key, tmp);
-								persons[i].id = Str2Int(tmp.GetString());
-							}
-							break;
-						case 1:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].positionId = Str2Int(tmp.GetString());
-							}
-							break;
-						case 2:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].code = tmp;
-							}
-							break;
-						case 3:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].rankId = Str2Int(tmp.GetString());
-							}
-							break;
-						case 4:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].fio = tmp;
-							}
-							break;
-						case 5:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].callsign = tmp;
-							}
-							break;
-						case 6:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].birthday = tmp;
-							}
-							break;
-						case 7:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].address = tmp;
-							}
-							break;
-						case 8:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].phone = tmp;
-							}
-							break;
-						case 9:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].shoesSize = Str2Dbl(tmp.GetString());
-							}
-							break;
-						case 10:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].clothersSize = Str2Dbl(tmp.GetString());
-							}
-							break;
-						case 11:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].weapons = string2mas(tmp);
-							}
-							break;
-						case 12:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].comment = tmp;
-							}
-							break;
-						case 13:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].divizionId = Str2Int(tmp.GetString());
-							}
-							break;
-						case 14:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].ubd = tmp;
-							}
-							break;
-						case 15:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (!tmp.IsEmpty()) {
-								decodeStr(key, tmp);
-								persons[i].startDate = tmp;
-							}
-							break;
-						}
-					}
-					catch (_com_error& er)
-					{ // Если поле имеет недопустимый формат
-						CString s; s.Format(L"Помилка читання PERSON. Код: 0x%8X %s [%d, %d]", er.Error(), er.ErrorMessage(), i, j);
-						AfxMessageBox(s, MB_ICONERROR);
-						persons.clear();
-						return;
-					}
-				}
-			}
+	int WriteSQL(CString key) {
+		int res = 0;
+		for (int i = 0; i < (int)persons.size(); i++) {
+			res += persons[i].WriteSQL(db, key);
 		}
-		catch (_com_error& err)
-		{
-			CString s; s.Format(L"Помилка читання PERSON. Код: 0x%8X %s [%d, %d]", err.Error(), err.ErrorMessage(), i, j);
-			AfxMessageBox(s, MB_ICONERROR);
-			persons.clear();
-		}
-
-		for (int a = (int)emptyRows.size() - 1; a >= 0; a--) {
-			std::vector<Person>::iterator it = persons.begin();
-			std::advance(it, emptyRows[a]);
-			persons.erase(it);
-		}
+		return res;
 	}
 
-	void Write(Excel::_WorkbookPtr book, Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		CString tmp;
+	int DeleteSQL(int id2del)
+	{
+		if (id2del < 0)
+			return 0;
 
-		Excel::RangePtr pRange = sheet->UsedRange;
-		int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-		int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-		if (startRow != endRow || startCol != endCol) {
-			// нужно почистить всё 
-			for (i = startRow; i <= endRow; i++) {
-				for (j = startCol; j <= endCol; j++) {
-					pRange = sheet->Cells->Item[i][j];
-					pRange->Value = _T("");
-				}
-			}
+		// собственно удаление
+		sqlite3_stmt* stmt;
+		std::string sql = "DELETE FROM PERSON WHERE ID=?";
+		if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+			return 1;
 		}
 
-		for (i = 0; i < (long)persons.size(); i++) {
-			tmp = Int2Str(persons[i].id).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][1];
-			pRange->Value = tmp.GetString();
+		sqlite3_bind_int(stmt, 1, id2del);
 
-			tmp = Int2Str(persons[i].positionId).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][2];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].code;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][3];
-			pRange->Value = tmp.GetString();
-
-			tmp = Int2Str(persons[i].rankId).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][4];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].fio;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][5];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].callsign;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][6];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].birthday;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][7];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].address;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][8];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].phone;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][9];
-			pRange->Value = tmp.GetString();
-
-			tmp = Dbl2Str(persons[i].shoesSize,1).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][10];
-			pRange->Value = tmp.GetString();
-
-			tmp = Dbl2Str(persons[i].clothersSize, 1).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][11];
-			pRange->Value = tmp.GetString();
-
-			tmp = mas2string(persons[i].weapons);
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][12];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].comment;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][13];
-			pRange->Value = tmp.GetString();
-
-			tmp = Int2Str(persons[i].divizionId).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][14];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].ubd;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][15];
-			pRange->Value = tmp.GetString();
-
-			tmp = persons[i].startDate;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][16];
-			pRange->Value = tmp.GetString();
+		if (sqlite3_step(stmt) != SQLITE_DONE) {
+			sqlite3_finalize(stmt);
+			return 1;
 		}
 
-		book->Save();
+		sqlite3_reset(stmt);
+		sqlite3_clear_bindings(stmt);
+		
+		return 0;
 	}
 };

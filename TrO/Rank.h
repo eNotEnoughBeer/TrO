@@ -1,6 +1,7 @@
 #pragma once
 #include <atlstr.h>
 #include <vector>
+#include "sqlite3.h"
 #import "EXCEL8.OLB" auto_search auto_rename
 
 class Rank
@@ -21,113 +22,185 @@ public:
 
 class Ranks {
 public:
+	sqlite3* db;
 	std::vector<Rank> ranks;
 	Ranks() {
 		ranks.clear();
 	}
 
-	void Read(Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		std::vector<int> emptyRows; emptyRows.clear();
-		try {
-			Excel::RangePtr pRange = sheet->UsedRange;
-			int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-			int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-			if (startRow == endRow && startCol == endCol) {
-				// закладка пустая 
-				return;
-			}
-
-			ranks.resize((size_t)(nRows));
-			_variant_t varr = pRange->GetValue2(), val;
-			long iLBound[2] = { 0,0 }, iUBound[2] = { 0,0 };
-			HRESULT hr;
-			_bstr_t str;
-			CString tmp;
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 1, &iLBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 1, &iUBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 2, &iLBound[1]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 2, &iUBound[1]))) throw _com_error(hr);
-
-			for (i = 0; i <= iUBound[0] - iLBound[0]; i++)
-			{
-				for (j = 0; j <= iUBound[1] - iLBound[1]; j++)
-				{
-					long ind[2] = { iLBound[0] + i, iLBound[1] + j };
-					if (FAILED(hr = SafeArrayGetElement(varr.parray, ind, &val))) throw _com_error(hr);
-					try
-					{
-						switch (j) {
-						case 0:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (tmp.IsEmpty()) {
-								emptyRows.push_back(i);
-							}
-							decodeStr(key, tmp);
-							ranks[i].id = Str2Int(tmp.GetString());
-							break;
-						case 1:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							ranks[i].name = tmp;
-							break;
-						}
-
-					}
-					catch (_com_error& er)
-					{ // Если поле имеет недопустимый формат
-						CString s; s.Format(L"Помилка читання RANKS. Код: 0x%8X %s [%d, %d]", er.Error(), er.ErrorMessage(), i, j);
-						AfxMessageBox(s, MB_ICONERROR);
-						ranks.clear();
-						return;
-					}
+	int checkTable()
+	{
+		bool needInserts = false;
+		char* errMsg;
+		std::string sql = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'RANK'; ";
+		sqlite3_stmt* stmt;
+		if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+			int colQ = sqlite3_column_count(stmt);
+			int execCode = 0;
+			execCode = sqlite3_step(stmt);
+			if (execCode == SQLITE_ROW) {
+				if (0 == Str2Int(CA2W((char*)sqlite3_column_text(stmt, 0)))) {
+					needInserts = true;
 				}
 			}
+			sqlite3_finalize(stmt);
 		}
-		catch (_com_error& err)
-		{
-			CString s; s.Format(L"Помилка читання RANKS. Код: 0x%8X %s [%d, %d]", err.Error(), err.ErrorMessage(), i, j);
-			AfxMessageBox(s, MB_ICONERROR);
-			ranks.clear();
+
+		sql = "CREATE TABLE IF NOT EXISTS RANK("
+			"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+			"NAME TEXT, "
+			"ROWPOS INTEGER NOT NULL); ";
+
+		if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+			sqlite3_free(errMsg);
+			return 1;
 		}
-		for (int a = 0; a < (int)emptyRows.size(); a++) {
-			std::vector<Rank>::iterator it = ranks.begin();
-			std::advance(it, emptyRows[a]);
-			ranks.erase(it);
+
+		//-> а теперь заполнить каталог начальными данными
+		if (needInserts) {
+			USES_CONVERSION;
+			std::vector<std::wstring> values;
+			values.push_back(_T("Полковник"));
+			values.push_back(_T("Підполковник"));
+			values.push_back(_T("Майор"));
+			values.push_back(_T("Капітан"));
+			values.push_back(_T("Старший лейтенант"));
+			values.push_back(_T("Лейтенант"));
+			values.push_back(_T("Молодший лейтенант"));
+			values.push_back(_T("Головний майстер-сержант"));
+			values.push_back(_T("Старший майстер-сержант"));
+			values.push_back(_T("Майстер-сержант"));
+			values.push_back(_T("Штаб-сержант"));
+			values.push_back(_T("Головний сержант"));
+			values.push_back(_T("Сержант"));
+			values.push_back(_T("Молодший сержант"));
+			values.push_back(_T("Старший солдат"));
+			values.push_back(_T("Солдат"));
+			for (int i = 0; i < (int)values.size(); i++) {
+				sql = "INSERT INTO RANK(NAME, ROWPOS) VALUES(?,?); ";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
+				}
+				std::string _str = CW2A(values.at(i).c_str());
+
+				sqlite3_bind_text(stmt, 1, _str.c_str(), strlen(_str.c_str()), NULL);
+				sqlite3_bind_int(stmt, 2, i);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
+			}
+		}
+		//<-
+
+		return 0;
+	}
+
+	void ReadSQL(CString key) {
+		USES_CONVERSION;
+		ranks.clear();
+		CString tmp;
+		Rank pOneRank;
+		sqlite3_stmt* stmt;
+		std::string sql = "SELECT * FROM RANK ORDER BY ROWPOS";
+		if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+			int colQ = sqlite3_column_count(stmt);
+			int execCode = 0;
+
+			while (sqlite3_step(stmt) == SQLITE_ROW)
+			{				
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 0));
+				pOneRank.id = Str2Int(tmp.GetString());
+
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 1));
+				decodeStr(key, tmp);
+				pOneRank.name = tmp;
+
+				ranks.push_back(pOneRank);
+			}
+
+			sqlite3_finalize(stmt);
 		}
 	}
 
-	void Write(Excel::_WorkbookPtr book, Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		CString tmp;
-
-		Excel::RangePtr pRange = sheet->UsedRange;
-		int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-		int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-		if (startRow != endRow || startCol != endCol) {
-			// нужно почистить всё 
-			for (i = startRow; i <= endRow; i++) {
-				for (j = startCol; j <= endCol; j++) {
-					pRange = sheet->Cells->Item[i][j];
-					pRange->Value = _T("");
+	int WriteSQL(CString key) {
+		USES_CONVERSION;
+		sqlite3_stmt* stmt;
+		std::string sql;
+		for (int i = 0; i < (int)ranks.size(); i++) {
+			if (ranks.at(i).id == -1) {
+				//insert
+				sql = "INSERT INTO RANK(NAME, ROWPOS) VALUES (?, ?);";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
 				}
+
+				CString tmp = ranks.at(i).name;
+				encodeStr(key, tmp);
+				std::string name_str = CW2A(tmp.GetString());
+				sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+				sqlite3_bind_int(stmt, 2, i);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+				ranks[i].id = (int)sqlite3_last_insert_rowid(db);
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
+			}
+			else {
+				//update
+				sql = "UPDATE RANK SET NAME=?, ROWPOS=? WHERE ID= ?";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
+				}
+
+				CString tmp = ranks.at(i).name;
+				encodeStr(key, tmp);
+				std::string name_str = CW2A(tmp.GetString());
+				sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+				sqlite3_bind_int(stmt, 2, i);
+				sqlite3_bind_int(stmt, 3, ranks.at(i).id);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
 			}
 		}
+		return 0;
+	}
 
-		for (i = 0; i < (long)ranks.size(); i++) {
-			tmp = Int2Str(ranks[i].id).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][1];
-			pRange->Value = tmp.GetString();
+	int DeleteSQL(std::vector<int> ids2del)
+	{
+		for (int i = 0; i < (int)ids2del.size(); i++){
+			if (ids2del.at(i) == -1)
+				continue;
 
-			tmp = ranks[i].name;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][2];
-			pRange->Value = tmp.GetString();
+			// собственно удаление
+			sqlite3_stmt* stmt;
+			std::string sql = "DELETE FROM RANK WHERE ID=?";
+			if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+				return 1;
+			}
+
+			sqlite3_bind_int(stmt, 1, ids2del.at(i));
+
+			if (sqlite3_step(stmt) != SQLITE_DONE) {
+				sqlite3_finalize(stmt);
+				return 1;
+			}
+			
+			sqlite3_reset(stmt);
+			sqlite3_clear_bindings(stmt);
 		}
-
-		book->Save();
+		return 0;
 	}
 };

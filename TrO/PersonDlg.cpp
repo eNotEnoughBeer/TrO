@@ -42,15 +42,13 @@ BOOL PersonDlg::OnInitDialog()
 {
 	CDialog::OnInitDialog();
 	CenterWindow();
-
+	delIdsRelatives.clear();
 	weaponArr.clear();
-	for (int i = 0; i < (int)pLogic->pWeaponTypes.weaponTypes.size(); i++) {
-		for (int j = 0; j < (int)pLogic->pWeaponNums.weaponNums.size(); j++) {
-			if (pLogic->pWeaponTypes.weaponTypes[i].id == pLogic->pWeaponNums.weaponNums[j].typeId) {
-				_ID_NAME tmp(pLogic->pWeaponNums.weaponNums[j].id);
-				tmp.name.Format(_T("%s %s"), pLogic->pWeaponTypes.weaponTypes[i].name.GetString(), pLogic->pWeaponNums.weaponNums[j].name.GetString());
-				weaponArr.push_back(tmp);
-			}
+	for (int i = 0; i < (int)pLogic->pWeapons.pWeapons.size(); i++) {
+		for (int j = 0; j < (int)pLogic->pWeapons.pWeapons.at(i).pWeaponNumbers.size(); j++) {
+			_ID_NAME tmp(pLogic->pWeapons.pWeapons.at(i).pWeaponNumbers.at(j).id);
+			tmp.name.Format(_T("%s %s"), pLogic->pWeapons.pWeapons.at(i).name.GetString(), pLogic->pWeapons.pWeapons.at(i).pWeaponNumbers.at(j).name.GetString());
+			weaponArr.push_back(tmp);
 		}
 	}
 	// сортирнем список по возрастанию
@@ -148,7 +146,7 @@ std::vector<_ID_NAME> PersonDlg::parseDivision()
 	
 	// выбираем все роты
 	for (int i = 0; i < (int)pLogic->pDivizions.divisions.size(); i++) {
-		if (pLogic->pDivizions.divisions[i].rotaId == -1 && pLogic->pDivizions.divisions[i].vzvodId == -1) {
+		if (pLogic->pDivizions.divisions[i].rotaId == 0 && pLogic->pDivizions.divisions[i].vzvodId == 0) {
 			_ID_NAME pOne(pLogic->pDivizions.divisions[i].id); 
 			pOne.name = pLogic->pDivizions.divisions[i].name;
 			rota.push_back(pOne);
@@ -160,14 +158,14 @@ std::vector<_ID_NAME> PersonDlg::parseDivision()
 
 		// выбираем взводы для роты
 		for (int j = 0; j < (int)pLogic->pDivizions.divisions.size(); j++) {
-			if (pLogic->pDivizions.divisions[j].rotaId == rota[i].id && pLogic->pDivizions.divisions[j].vzvodId == -1) {
+			if (pLogic->pDivizions.divisions[j].rotaId == rota[i].id && pLogic->pDivizions.divisions[j].vzvodId == 0) {
 				_ID_NAME pOne(pLogic->pDivizions.divisions[j].id);
-				pOne.name.Format(_T("-%s"), pLogic->pDivizions.divisions[j].name.GetString());
+				pOne.name.Format(_T("--%s"), pLogic->pDivizions.divisions[j].name.GetString());
 				result.push_back(pOne);// теперь ставим i-й взвод роты
 				for (int a = 0; a < (int)pLogic->pDivizions.divisions.size(); a++) {
 					if (pLogic->pDivizions.divisions[j].rotaId == rota[i].id && pLogic->pDivizions.divisions[a].vzvodId == pOne.id) {
 						_ID_NAME pTwo(pLogic->pDivizions.divisions[a].id);
-						pTwo.name.Format(_T("--%s"), pLogic->pDivizions.divisions[a].name.GetString());
+						pTwo.name.Format(_T("----%s"), pLogic->pDivizions.divisions[a].name.GetString());
 						result.push_back(pTwo);// теперь ставим i-й отделение взвода роты
 					}
 				}
@@ -390,6 +388,7 @@ void PersonDlg::OnBnClickedDelrel()
 
 	std::vector<Relative>::iterator it;	it = rels->begin();
 	std::advance(it, m_gridRel.GetCellFocused().m_iRow);
+	delIdsRelatives.push_back(it->id);
 	rels->erase(it);
 	m_gridRel.SetRowCount(m_gridRel.GetRowCount() - 1);
 	m_gridRel.Invalidate();

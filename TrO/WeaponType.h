@@ -1,133 +1,283 @@
 #pragma once
 #include <atlstr.h>
+#include "sqlite3.h"
 #include <vector>
-#import "EXCEL8.OLB" auto_search auto_rename
 
-class WeaponType
+class WeaponNumber
 {
 public:
 	int id;
 	CString name;
-	WeaponType() {
+	WeaponNumber() {
 		id = -1;
 		name = _T("");
 	}
-	WeaponType(int index, CString curName) {
+	WeaponNumber(int index, CString curName) {
 		id = index;
 		name = curName;
 	}
 
 };
 
-class WeaponTypes {
+class WeaponType
+{
 public:
-	std::vector<WeaponType> weaponTypes;
-	WeaponTypes() {
-		weaponTypes.clear();
+	int id;
+	CString name;
+	std::vector<WeaponNumber> pWeaponNumbers;
+	WeaponType() {
+		id = -1;
+		name = _T("");
+		pWeaponNumbers.clear();
+	}
+	WeaponType(int index, CString curName) {
+		id = index;
+		name = curName;
+		pWeaponNumbers.clear();
 	}
 
-	void Read(Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
-		std::vector<int> emptyRows; emptyRows.clear();
-		try {
-			Excel::RangePtr pRange = sheet->UsedRange;
-			int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-			int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-			if (startRow == endRow && startCol == endCol) {
-				// закладка пуста€ 
-				return;
-			}
+};
 
-			weaponTypes.resize((size_t)(nRows));
-			_variant_t varr = pRange->GetValue2(), val;
-			long iLBound[2] = { 0,0 }, iUBound[2] = { 0,0 };
-			HRESULT hr;
-			_bstr_t str;
-			CString tmp;
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 1, &iLBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 1, &iUBound[0]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetLBound(varr.parray, 2, &iLBound[1]))) throw _com_error(hr);
-			if (FAILED(hr = SafeArrayGetUBound(varr.parray, 2, &iUBound[1]))) throw _com_error(hr);
-
-			for (i = 0; i <= iUBound[0] - iLBound[0]; i++)
-			{
-				for (j = 0; j <= iUBound[1] - iLBound[1]; j++)
-				{
-					long ind[2] = { iLBound[0] + i, iLBound[1] + j };
-					if (FAILED(hr = SafeArrayGetElement(varr.parray, ind, &val))) throw _com_error(hr);
-					try
-					{
-						switch (j) {
-						case 0:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							if (tmp.IsEmpty()) {
-								emptyRows.push_back(i);
-							}
-							decodeStr(key, tmp);
-							weaponTypes[i].id = Str2Int(tmp.GetString());
-							break;
-						case 1:
-							tmp = ((std::wstring)_bstr_t(val)).c_str();
-							decodeStr(key, tmp);
-							weaponTypes[i].name = tmp;
-							break;
-						}
-
-					}
-					catch (_com_error& er)
-					{ // ≈сли поле имеет недопустимый формат
-						CString s; s.Format(L"ѕомилка читанн€ WEPTYP.  од: 0x%8X %s [%d, %d]", er.Error(), er.ErrorMessage(), i, j);
-						AfxMessageBox(s, MB_ICONERROR);
-						weaponTypes.clear();
-						return;
-					}
-				}
-			}
-		}
-		catch (_com_error& err)
-		{
-			CString s; s.Format(L"ѕомилка читанн€ WEPTYP.  од: 0x%8X %s [%d, %d]", err.Error(), err.ErrorMessage(), i, j);
-			AfxMessageBox(s, MB_ICONERROR);
-			weaponTypes.clear();
-		}
-		for (int a = 0; a < (int)emptyRows.size(); a++) {
-			std::vector<WeaponType>::iterator it = weaponTypes.begin();
-			std::advance(it, emptyRows[a]);
-			weaponTypes.erase(it);
-		}
+class Weapons {
+public:
+	sqlite3* db;
+	std::vector<WeaponType> pWeapons;
+	Weapons() {
+		pWeapons.clear();
 	}
 
-	void Write(Excel::_WorkbookPtr book, Excel::_WorksheetPtr sheet, CString key) {
-		int nRows = 1, nCols = 1;
-		long i = 0, j = 0;
+	int checkTable()
+	{
+		char* errMsg;
+		std::string sql = "CREATE TABLE IF NOT EXISTS WEPTYP("
+			"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+			"NAME TEXT, "
+			"ROWPOS INTEGER NOT NULL); ";
+
+		if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+			sqlite3_free(errMsg);
+			return 1;
+		}
+
+		sql = "CREATE TABLE IF NOT EXISTS WEPNUM("
+			"ID INTEGER PRIMARY KEY AUTOINCREMENT, "
+			"NAME TEXT, "
+			"WEPTYP_ID INTEGER, "
+			"ROWPOS INTEGER NOT NULL); ";
+
+		if (sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg) != SQLITE_OK) {
+			sqlite3_free(errMsg);
+			return 1;
+		}
+
+		return 0;
+	}
+
+	void ReadSQL(CString key) {
+		USES_CONVERSION;
+		pWeapons.clear();
 		CString tmp;
+		WeaponType pOneWeptyp;
+		sqlite3_stmt* stmt;
+		// читаем главную таблицу
+		std::string sql = "SELECT * FROM WEPTYP ORDER BY ROWPOS";
+		if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+			int colQ = sqlite3_column_count(stmt);
+			int execCode = 0;
 
-		Excel::RangePtr pRange = sheet->UsedRange;
-		int startRow = 1, endRow = (pRange->Rows->Count > nRows) ? pRange->Rows->Count : nRows; nRows = endRow;
-		int startCol = 1, endCol = (pRange->Columns->Count > nCols) ? pRange->Columns->Count : nCols; nCols = endCol;
-		if (startRow != endRow || startCol != endCol) {
-			// нужно почистить всЄ 
-			for (i = startRow; i <= endRow; i++) {
-				for (j = startCol; j <= endCol; j++) {
-					pRange = sheet->Cells->Item[i][j];
-					pRange->Value = _T("");
+			while (sqlite3_step(stmt) == SQLITE_ROW)
+			{
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 0));
+				pOneWeptyp.id = Str2Int(tmp.GetString());
+
+				tmp = CA2W((char*)sqlite3_column_text(stmt, 1));
+				decodeStr(key, tmp);
+				pOneWeptyp.name = tmp;
+
+				pWeapons.push_back(pOneWeptyp);
+			}
+
+			sqlite3_finalize(stmt);
+		}
+		// читаем вложенную с табельными номерами
+		WeaponNumber pOneNumber;
+		for (int i = 0; i < (int)pWeapons.size(); i++) {
+			sql = "SELECT * FROM WEPNUM WHERE WEPTYP_ID=";
+			sql += CW2A(Int2Str(pWeapons.at(i).id).c_str());
+			sql +=" ORDER BY ROWPOS";
+			if (sqlite3_prepare(db, sql.c_str(), -1, &stmt, 0) == SQLITE_OK) {
+				int colQ = sqlite3_column_count(stmt);
+				int execCode = 0;
+
+				while (sqlite3_step(stmt) == SQLITE_ROW)
+				{
+					tmp = CA2W((char*)sqlite3_column_text(stmt, 0));
+					pOneNumber.id = Str2Int(tmp.GetString());
+
+					tmp = CA2W((char*)sqlite3_column_text(stmt, 1));
+					decodeStr(key, tmp);
+					pOneNumber.name = tmp;
+
+					pWeapons[i].pWeaponNumbers.push_back(pOneNumber);
 				}
+
+				sqlite3_finalize(stmt);
 			}
 		}
 
-		for (i = 0; i < (long)weaponTypes.size(); i++) {
-			tmp = Int2Str(weaponTypes[i].id).c_str();
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][1];
-			pRange->Value = tmp.GetString();
+	}
 
-			tmp = weaponTypes[i].name;
-			encodeStr(key, tmp);
-			pRange = sheet->Cells->Item[i + 1][2];
-			pRange->Value = tmp.GetString();
+	int WriteSQL(CString key) {
+		USES_CONVERSION;
+		sqlite3_stmt* stmt;
+		std::string sql;
+		// пишем главную таблицу
+		for (int i = 0; i < (int)pWeapons.size(); i++) {
+			if (pWeapons.at(i).id == -1) {
+				//insert
+				sql = "INSERT INTO WEPTYP(NAME, ROWPOS) VALUES (?, ?);";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
+				}
+
+				CString tmp = pWeapons.at(i).name;
+				encodeStr(key, tmp);
+				std::string name_str = CW2A(tmp.GetString());
+				sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+
+				sqlite3_bind_int(stmt, 2, i);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+				pWeapons[i].id = (int)sqlite3_last_insert_rowid(db);
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
+			}
+			else {
+				//update
+				sql = "UPDATE WEPTYP SET NAME=?, ROWPOS=? WHERE ID= ?";
+				if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+					return 1;
+				}
+
+				CString tmp = pWeapons.at(i).name;
+				encodeStr(key, tmp);
+				std::string name_str = CW2A(tmp.GetString());
+				sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+
+				sqlite3_bind_int(stmt, 2, i);
+				sqlite3_bind_int(stmt, 3, pWeapons.at(i).id);
+
+				if (sqlite3_step(stmt) != SQLITE_DONE) {
+					sqlite3_finalize(stmt);
+					return 1;
+				}
+				sqlite3_reset(stmt);
+				sqlite3_clear_bindings(stmt);
+			}
 		}
 
-		book->Save();
+		// пишем вложенную таблицу
+		for (int i = 0; i < (int)pWeapons.size(); i++) {
+			for (int a = 0; a < (int)pWeapons.at(i).pWeaponNumbers.size(); a++) {
+				if (pWeapons.at(i).pWeaponNumbers.at(a).id == -1) {
+					//insert
+					sql = "INSERT INTO WEPNUM(NAME, WEPTYP_ID, ROWPOS) VALUES (?, ?, ?);";
+					if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+						return 1;
+					}
+
+					CString tmp = pWeapons.at(i).pWeaponNumbers.at(a).name;
+					encodeStr(key, tmp);
+					std::string name_str = CW2A(tmp.GetString());
+					sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+					sqlite3_bind_int(stmt, 2, pWeapons.at(i).id);
+					sqlite3_bind_int(stmt, 3, a);
+
+					if (sqlite3_step(stmt) != SQLITE_DONE) {
+						sqlite3_finalize(stmt);
+						return 1;
+					}
+					pWeapons[i].pWeaponNumbers[a].id = (int)sqlite3_last_insert_rowid(db);
+					sqlite3_reset(stmt);
+					sqlite3_clear_bindings(stmt);
+				}
+				else {
+					//update
+					sql = "UPDATE WEPNUM SET NAME=?, WEPTYP_ID=?, ROWPOS=? WHERE ID= ?";
+					if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+						return 1;
+					}
+
+					CString tmp = pWeapons.at(i).pWeaponNumbers.at(a).name;
+					encodeStr(key, tmp);
+					std::string name_str = CW2A(tmp.GetString());
+					sqlite3_bind_text(stmt, 1, name_str.c_str(), strlen(name_str.c_str()), NULL);
+					sqlite3_bind_int(stmt, 2, pWeapons.at(i).id);
+					sqlite3_bind_int(stmt, 3, a);
+					sqlite3_bind_int(stmt, 4, pWeapons.at(i).pWeaponNumbers.at(a).id);
+
+					if (sqlite3_step(stmt) != SQLITE_DONE) {
+						sqlite3_finalize(stmt);
+						return 1;
+					}
+					sqlite3_reset(stmt);
+					sqlite3_clear_bindings(stmt);
+				}
+			}
+		}
+		return 0;
+	}
+
+	int DeleteSQLType(std::vector<int> ids2del)
+	{
+		for (int i = 0; i < (int)ids2del.size(); i++) {
+			if (ids2del.at(i) == -1)
+				continue;
+
+			sqlite3_stmt* stmt;
+			std::string sql = "DELETE FROM WEPTYP WHERE ID=?";
+			if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+				return 1;
+			}
+
+			sqlite3_bind_int(stmt, 1, ids2del.at(i));
+
+			if (sqlite3_step(stmt) != SQLITE_DONE) {
+				sqlite3_finalize(stmt);
+				return 1;
+			}
+
+			sqlite3_reset(stmt);
+			sqlite3_clear_bindings(stmt);
+		}
+		return 0;
+	}
+
+	int DeleteSQLNumber(std::vector<int> ids2del)
+	{
+		for (int i = 0; i < (int)ids2del.size(); i++) {
+			if (ids2del.at(i) == -1)
+				continue;
+
+			sqlite3_stmt* stmt;
+			std::string sql = "DELETE FROM WEPNUM WHERE ID=?";
+			if (sqlite3_prepare_v2(db, sql.c_str(), strlen(sql.c_str()), &stmt, nullptr) != SQLITE_OK) {
+				return 1;
+			}
+
+			sqlite3_bind_int(stmt, 1, ids2del.at(i));
+
+			if (sqlite3_step(stmt) != SQLITE_DONE) {
+				sqlite3_finalize(stmt);
+				return 1;
+			}
+
+			sqlite3_reset(stmt);
+			sqlite3_clear_bindings(stmt);
+		}
+		return 0;
 	}
 };

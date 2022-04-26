@@ -57,9 +57,6 @@
     <ClInclude Include="WeaponType.h">
       <Filter>Header Files\Logic</Filter>
     </ClInclude>
-    <ClInclude Include="WeaponNum.h">
-      <Filter>Header Files\Logic</Filter>
-    </ClInclude>
     <ClInclude Include="Relative.h">
       <Filter>Header Files\Logic</Filter>
     </ClInclude>
@@ -99,9 +96,6 @@
     <ClInclude Include="TrODlg.h">
       <Filter>Header Files\DialogsH</Filter>
     </ClInclude>
-    <ClInclude Include="UnicIds.h">
-      <Filter>Header Files\Logic</Filter>
-    </ClInclude>
     <ClInclude Include="PositDlg.h">
       <Filter>Header Files\DialogsH</Filter>
     </ClInclude>
@@ -125,6 +119,9 @@
     </ClInclude>
     <ClInclude Include="PersonDlg.h">
       <Filter>Header Files\DialogsH</Filter>
+    </ClInclude>
+    <ClInclude Include="sqlite3.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -172,6 +169,9 @@
     </ClCompile>
     <ClCompile Include="PersonDlg.cpp">
       <Filter>Source Files\Dialogs</Filter>
+    </ClCompile>
+    <ClCompile Include="sqlite3.c">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

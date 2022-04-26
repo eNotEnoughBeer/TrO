@@ -67,6 +67,7 @@ BOOL PositDlg::OnInitDialog()
 	m_grid.GetHeader()->SetSectionHeight(24);
 	m_grid.SetAllowEdit();
 	m_grid.SetRowCount((int)pLogic->pPositions.positions.size());
+	delIds.clear();
 	return TRUE;
 }
 
@@ -138,7 +139,7 @@ void PositDlg::OnBnClickedAdd()
 {
 	m_grid.PressReturn();
 	CGridCell cell = m_grid.GetCellFocused();
-	Position pNewOne(pLogic->ids.position_id++, _T(""),-1);
+	Position pNewOne(-1, _T(""),-1);
 	if (m_grid.GetRowCount() == 0) {
 		pLogic->pPositions.positions.push_back(pNewOne);
 	}
@@ -157,7 +158,7 @@ void PositDlg::OnKeyDownGridResect(LPNMHDR lpNMHDR, LRESULT* pResult)
 	CGridCell cell = m_grid.GetCellFocused();
 	if (lpNMKey->nVKey == VK_DOWN && cell.m_iRow == m_grid.GetRowCount() - 1)
 	{
-		Position pNewOne(pLogic->ids.position_id++, _T(""),-1);
+		Position pNewOne(-1, _T(""),-1);
 		pLogic->pPositions.positions.push_back(pNewOne);
 		m_grid.SetRowCount(m_grid.GetRowCount() + 1);
 	}
@@ -181,6 +182,7 @@ void PositDlg::OnBnClickedDel()
 		}
 	}
 	if (canDelete) {
+		delIds.push_back(it->id);
 		pLogic->pPositions.positions.erase(it);
 		m_grid.SetRowCount(m_grid.GetRowCount() - 1);
 		m_grid.Invalidate();
@@ -193,5 +195,13 @@ void PositDlg::OnBnClickedDel()
 void PositDlg::OnBnClickedOk()
 {
 	m_grid.PressReturn();
+
+	int res = pLogic->pPositions.WriteSQL(pLogic->encriptionKey);
+	res += pLogic->pPositions.DeleteSQL(delIds);
+	if (res > 0) {
+		AfxMessageBox(_T("Виникли проблеми із каталогом посади"));
+	}
+
+	pLogic->pPositions.ReadSQL(pLogic->encriptionKey);
 	CDialog::OnOK();
 }

@@ -35,6 +35,7 @@ BOOL RankDlg::OnInitDialog()
 	m_grid.GetHeader()->SetSectionHeight(24);
 	m_grid.SetAllowEdit();
 	m_grid.SetRowCount((int)pLogic->pRanks.ranks.size());
+	delIds.clear();
 	return TRUE;
 }
 
@@ -79,7 +80,7 @@ void RankDlg::OnBnClickedAdd()
 {
 	m_grid.PressReturn();
 	CGridCell cell = m_grid.GetCellFocused();
-	Rank pNewOne(pLogic->ids.rank_id++, _T(""));
+	Rank pNewOne(-1, _T(""));
 	if (m_grid.GetRowCount() == 0) {
 		pLogic->pRanks.ranks.push_back(pNewOne);
 	}
@@ -98,7 +99,7 @@ void RankDlg::OnKeyDownGridResect(LPNMHDR lpNMHDR, LRESULT* pResult)
 	CGridCell cell = m_grid.GetCellFocused();
 	if (lpNMKey->nVKey == VK_DOWN && cell.m_iRow == m_grid.GetRowCount() - 1)
 	{
-		Rank pNewOne(pLogic->ids.rank_id++, _T(""));
+		Rank pNewOne(-1, _T(""));
 		pLogic->pRanks.ranks.push_back(pNewOne);
 		m_grid.SetRowCount(m_grid.GetRowCount() + 1);
 	}
@@ -128,6 +129,7 @@ void RankDlg::OnBnClickedDel()
 		}
 	}
 	if (canDelete) {
+		delIds.push_back(it->id);
 		pLogic->pRanks.ranks.erase(it);
 		m_grid.SetRowCount(m_grid.GetRowCount() - 1);
 		m_grid.Invalidate();
@@ -140,5 +142,13 @@ void RankDlg::OnBnClickedDel()
 void RankDlg::OnBnClickedOk()
 {
 	m_grid.PressReturn();
+
+	int res = pLogic->pRanks.WriteSQL(pLogic->encriptionKey);
+	res += pLogic->pRanks.DeleteSQL(delIds);
+	if (res > 0) {
+		AfxMessageBox(_T("Виникли проблеми із каталогом військового звання"));	
+	}
+
+	pLogic->pRanks.ReadSQL(pLogic->encriptionKey);
 	CDialog::OnOK();
 }

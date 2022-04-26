@@ -22,6 +22,7 @@ protected:
 	virtual BOOL OnInitDialog();
 	DECLARE_MESSAGE_MAP()
 public:
+	std::vector<int> delIds;
 	CVirtualGridCtrl m_grid;
 	void OnGetDispinfoGrid(LPNMHDR lpNMHDR, LRESULT* pResult);
 	void OnSetDispinfoGrid(LPNMHDR lpNMHDR, LRESULT* pResult);
